@@ -9,19 +9,19 @@
 
 namespace sys_info::collector {
 
-/// Датчик температуры (ID и значение в Цельсиях)
+/** @brief Датчик температуры (ID и значение в Цельсиях) */
 struct TempSensor {
     std::string id;
     float celsius;
 };
 
-/// Датчик вентилятора (ID и обороты в минуту)
+/** @brief Датчик вентилятора (ID и обороты в минуту) */
 struct FanSensor {
     std::string id;
     int rpm;
 };
 
-/// Данные температурных датчиков
+/** @brief Данные температурных датчиков */
 struct TempData {
     std::vector<TempSensor> package;
     std::vector<TempSensor> cores;
@@ -30,12 +30,12 @@ struct TempData {
     std::map<std::string, float> crit_sensors;
 };
 
-/// Данные вентиляторов
+/** @brief Данные вентиляторов */
 struct FanData {
     std::vector<FanSensor> fans;
 };
 
-/// Информация о процессоре
+/** @brief Информация о процессоре */
 struct CpuInfo {
     std::string model;
     int logical_cores = 0;
@@ -47,7 +47,7 @@ struct CpuInfo {
     std::string driver;
 };
 
-/// Загрузка процессора (CPU load averages + jiffies)
+/** @brief Загрузка процессора (CPU load averages + jiffies) */
 struct CpuLoad {
     uint64_t total = 0;
     uint64_t active = 0;
@@ -70,7 +70,7 @@ struct CpuLoad {
     std::vector<std::pair<uint64_t, uint64_t>> per_core;
 };
 
-/// Информация об оперативной памяти
+/** @brief Информация об оперативной памяти */
 struct MemInfo {
     uint64_t total = 0;
     uint64_t used = 0;
@@ -85,7 +85,7 @@ struct MemInfo {
     float swap_percent = 0.0f;
 };
 
-/// Информация о дисках
+/** @brief Информация о дисках */
 struct DiskInfo {
     struct Disk {
         std::string name;
@@ -112,7 +112,7 @@ struct DiskInfo {
     std::map<std::string, Mount> mounts;
 };
 
-/// Информация о батарее
+/** @brief Информация о батарее */
 struct BatteryInfo {
     int capacity = 0;
     int full_design = 0;
@@ -120,7 +120,7 @@ struct BatteryInfo {
     std::string status;
 };
 
-/// Информация о сетевом интерфейсе
+/** @brief Информация о сетевом интерфейсе */
 struct NetworkInfo {
     std::string name;
     std::string type;
@@ -130,7 +130,7 @@ struct NetworkInfo {
     uint64_t tx_bytes = 0;
 };
 
-/// Информация об оборудовании (DMI, BIOS, GPU, сеть)
+/** @brief Информация об оборудовании (DMI, BIOS, GPU, сеть) */
 struct HardwareInfo {
     std::string board_vendor;
     std::string board_name;
@@ -145,7 +145,7 @@ struct HardwareInfo {
     int pci_device_count = 0;
 };
 
-/// Полный статус системы
+/** @brief Полный статус системы */
 struct SystemStatus {
     CpuInfo cpu;
     CpuLoad load;
@@ -157,28 +157,28 @@ struct SystemStatus {
     std::chrono::system_clock::time_point timestamp;
 };
 
-/// Считать все данные системы
+/** @brief Считать все данные системы */
 SystemStatus read_all();
 
-/// Считать температуры (hwmon + thermal zones)
+/** @brief Считать температуры (hwmon + thermal zones) */
 TempData read_temperatures();
 
-/// Считать данные вентиляторов (hwmon)
+/** @brief Считать данные вентиляторов (hwmon) */
 FanData read_fans();
 
-/// Считать информацию о процессоре (model, cores, MHz, governor)
+/** @brief Считать информацию о процессоре (model, cores, MHz, governor) */
 CpuInfo read_cpu_info();
 
-/// Считать загрузку процессора (loadavg + jiffies)
+/** @brief Считать загрузку процессора (loadavg + jiffies) */
 CpuLoad read_cpu_load();
 
-/// Считать информацию об оперативной памяти
+/** @brief Считать информацию об оперативной памяти */
 MemInfo read_memory();
 
-/// Считать информацию о дисках и смонтированных разделах
+/** @brief Считать информацию о дисках и смонтированных разделах */
 DiskInfo read_disk_info();
 
-/// Считать информацию об оборудовании (DMI, BIOS, GPU, сеть, батарея)
+/** @brief Считать информацию об оборудовании (DMI, BIOS, GPU, сеть, батарея) */
 HardwareInfo read_hardware_info();
 
 // JSON сериализация
