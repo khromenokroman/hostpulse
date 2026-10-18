@@ -89,21 +89,56 @@ TempData read_temperatures() {
                 int32_t raw = std::stoi(val_str);
                 float c = celsius_from_millideg(raw);
 
-                std::string label;
+              std::string label;
+                std::string source;
                 if (hwmon_name == "coretemp") {
                     if (i == 1) {
                         label = "Температура пакета";
                         data.package.emplace_back(label, c);
+                        source = "coretemp";
                     } else {
                         label = "Ядро " + std::to_string(i - 1);
                         data.cores.emplace_back(label, c);
+                        source = "coretemp";
                     }
                 } else if (hwmon_name == "nvme") {
-                    label = "NVMe temp" + std::to_string(i);
+                    label = "NVMe";
                     data.sensors.emplace_back(label, c);
+                    source = "nvme";
+                } else if (hwmon_name == "acpitz") {
+                    label = "Материнская плата";
+                    data.sensors.emplace_back(label, c);
+                    source = "acpitz";
+                } else if (hwmon_name == "nct6687") {
+                    if (i == 1) {
+                        label = "Чипсет";
+                        data.sensors.emplace_back(label, c);
+                        source = "nct6687";
+                    } else if (i >= 2 && i <= 7) {
+                        label = "Датчик " + std::to_string(i);
+                        data.sensors.emplace_back(label, c);
+                        source = "nct6687";
+                    } else {
+                        source = "";
+                    }
+                } else if (hwmon_name == "drivetemp") {
+                    label = "SSD/SDD";
+                    data.sensors.emplace_back(label, c);
+                    source = "drivetemp";
                 } else {
-                    label = hwmon_name + " temp" + std::to_string(i);
-                    data.sensors.emplace_back(label, c);
+                    source = "";
+                }
+
+                if (!source.empty()) {
+                    auto max_str = read_file(temp_max_file);
+                    if (!max_str.empty()) {
+                        data.max_sensors[label] = std::stof(max_str) / 1000.0f;
+                    }
+
+                    auto crit_str = read_file(temp_crit_file);
+                    if (!crit_str.empty()) {
+                        data.crit_sensors[label] = std::stof(crit_str) / 1000.0f;
+                    }
                 }
 
                 auto max_str = read_file(temp_max_file);
@@ -170,8 +205,17 @@ FanData read_fans() {
             try {
                 int rpm = std::stoi(val_str);
                 if (rpm > 0) {
-                    std::string label = hwmon_name;
-                    if (i > 1) label += " fan" + std::to_string(i);
+                    std::string label;
+                    if (hwmon_name == "nct6687") {
+                        if (i == 1) label = "Вентилятор 1";
+                        else if (i == 2) label = "Вентилятор 2";
+                        else if (i == 3) label = "Вентилятор 3";
+                        else label = "Вентилятор " + std::to_string(i);
+                    } else if (hwmon_name == "coretemp") {
+                        label = "Вентилятор CPU";
+                    } else {
+                        label = hwmon_name + " fan" + std::to_string(i);
+                    }
                     data.fans.emplace_back(label, rpm);
                 }
             } catch (...) {
