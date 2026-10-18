@@ -61,7 +61,7 @@ static std::string build_html() {
          "    h+='<tr><td>Модель</td><td>'+cpu.model+'</td></tr>';\n"
          "    h+='<tr><td>Ядра (лог/физ)</td><td>'+cpu.logical_cores+' / '+cpu.physical_cores+'</td></tr>';\n"
          "    h+='<tr><td>Частота</td><td>'+cpu.current_mhz[0].toFixed(1)+' / '+cpu.min_mhz.toFixed(0)+'-'+cpu.max_mhz.toFixed(0)+' МГц</td></tr>';\n"
-         "    h+='<tr><td>Гос</td><td>'+cpu.governor+'</td></tr>';\n"
+         "    h+='<tr><td>Политика CPU</td><td>'+cpu.governor+'</td></tr>';\n"
          "    h+='</table></div>';}\n"
          "  if(load){h+='<div class=\"card\" id=\"load\"><h2>Нагрузка</h2><table>';\n"
          "    h+='<tr><td>Активность</td><td><span class=\"val '+tc(load.active_percent)+'\">'+load.active_percent.toFixed(1)+'%</span></td></tr>';\n"

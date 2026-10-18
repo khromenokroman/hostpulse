@@ -89,18 +89,20 @@ TempData read_temperatures() {
                 int32_t raw = std::stoi(val_str);
                 float c = celsius_from_millideg(raw);
 
-                std::string label = hwmon_name;
-                if (i > 1) {
-                    label += " temp" + std::to_string(i);
-                }
-
+                std::string label;
                 if (hwmon_name == "coretemp") {
                     if (i == 1) {
+                        label = "Температура пакета";
                         data.package.emplace_back(label, c);
                     } else {
+                        label = "Ядро " + std::to_string(i - 1);
                         data.cores.emplace_back(label, c);
                     }
+                } else if (hwmon_name == "nvme") {
+                    label = "NVMe temp" + std::to_string(i);
+                    data.sensors.emplace_back(label, c);
                 } else {
+                    label = hwmon_name + " temp" + std::to_string(i);
                     data.sensors.emplace_back(label, c);
                 }
 
