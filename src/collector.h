@@ -67,7 +67,12 @@ struct CpuLoad {
     float load1 = 0.0f;
     float load5 = 0.0f;
     float load15 = 0.0f;
-    std::vector<std::pair<uint64_t, uint64_t>> per_core;
+    struct CoreLoad {
+        int id = 0;
+        uint64_t active = 0;
+        uint64_t total = 0;
+    };
+    std::vector<CoreLoad> per_core;
 };
 
 /** @brief Информация об оперативной памяти */
@@ -220,6 +225,14 @@ inline void to_json(nlohmann::json& j, const CpuInfo& c) {
         {"max_mhz", c.max_mhz},
         {"governor", c.governor},
         {"driver", c.driver}
+    };
+}
+
+inline void to_json(nlohmann::json& j, const CpuLoad::CoreLoad& c) {
+    j = nlohmann::json{
+        {"id", c.id},
+        {"active", c.active},
+        {"total", c.total}
     };
 }
 
