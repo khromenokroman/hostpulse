@@ -133,6 +133,10 @@ struct NetworkInfo {
     int speed_mbps = 0;
     uint64_t rx_bytes = 0;
     uint64_t tx_bytes = 0;
+    uint64_t prev_rx = 0;
+    uint64_t prev_tx = 0;
+    float rate_rx_mbps = 0.0f;
+    float rate_tx_mbps = 0.0f;
 };
 
 /** @brief Информация об оборудовании (DMI, BIOS, GPU, сеть) */
@@ -323,7 +327,9 @@ inline void to_json(nlohmann::json& j, const NetworkInfo& n) {
         {"mac", n.mac},
         {"speed_mbps", n.speed_mbps},
         {"rx_bytes", n.rx_bytes},
-        {"tx_bytes", n.tx_bytes}
+        {"tx_bytes", n.tx_bytes},
+        {"rate_rx_mbps", n.rate_rx_mbps},
+        {"rate_tx_mbps", n.rate_tx_mbps}
     };
 }
 

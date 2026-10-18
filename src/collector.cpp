@@ -567,6 +567,7 @@ HardwareInfo read_hardware_info() {
 
     fs::path net_dir("/sys/class/net");
     if (fs::exists(net_dir)) {
+        static std::map<std::string, std::pair<uint64_t, uint64_t>> prev_rates;
         for (const auto& iface : fs::directory_iterator(net_dir)) {
             std::string name = iface.path().filename().string();
             if (name == "lo") continue;
@@ -585,6 +586,16 @@ HardwareInfo read_hardware_info() {
             auto tx = read_file(iface.path() / "statistics/tx_bytes");
             if (!rx.empty()) n.rx_bytes = std::stoull(rx);
             if (!tx.empty()) n.tx_bytes = std::stoull(tx);
+
+            auto pr = prev_rates[name];
+            if (pr.first > 0 && pr.second > 0) {
+                uint64_t dt = 1;
+                double rx_bits = (n.rx_bytes - pr.first) * 8.0;
+                double tx_bits = (n.tx_bytes - pr.second) * 8.0;
+                n.rate_rx_mbps = static_cast<float>(rx_bits / (dt * 1000000.0));
+                n.rate_tx_mbps = static_cast<float>(tx_bits / (dt * 1000000.0));
+            }
+            prev_rates[name] = {n.rx_bytes, n.tx_bytes};
         }
     }
 
