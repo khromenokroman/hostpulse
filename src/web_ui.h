@@ -32,12 +32,16 @@ tr:hover { background: #1c2128; }
 .fill-yellow { background: #d29922; }
 .fill-red { background: #f85149; }
 .fill-blue { background: #58a6ff; }
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-@media (max-width: 1400px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-.card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; }
+/* колонки вместо grid: карточки по высоте содержимого, без пустот под короткими */
+.grid { column-count: 4; column-width: 320px; column-gap: 12px; }
+.card h2 { margin-top: 0; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; break-inside: avoid; margin-bottom: 12px; }
 .card.error { border-color: #f85149; }
 .val { font-size: 1.2em; font-weight: bold; }
+/* значения по ядрам компактной сеткой в одной строке таблицы */
+.cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
+.core { background: #0d1117; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; }
+.core small { display: block; color: #8b949e; font-size: 0.85em; }
 .refresh { position: fixed; top: 10px; right: 15px; background: #238636; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em; }
 .refresh:hover { background: #2ea043; }
 .temp-critical { color: #f85149; font-weight: bold; }
@@ -75,6 +79,12 @@ function fb(b) {
 function deg(t) { return '<span class="' + tc(t) + '">' + num(t, 1) + '&#8451;</span>'; }
 function row(k, v) { return '<tr><td>' + k + '</td><td>' + v + '</td></tr>'; }
 function section(t) { return '<tr><td colspan="2"><strong>' + t + '</strong></td></tr>'; }
+function cores(items) {
+  if (!items.length) return '';
+  return '<tr><td colspan="2"><div class="cores">' +
+    items.map(([name, value]) => '<div class="core"><small>' + name + '</small>' + value + '</div>').join('') +
+    '</div></td></tr>';
+}
 function card(id, title, rows) {
   return rows ? '<div class="card" id="' + id + '"><h2>' + title + '</h2><table>' + rows + '</table></div>' : '';
 }
@@ -94,8 +104,7 @@ function loadCard(load) {
     row('Система', '<div class="val">' + num(load.system_percent, 1) + '%</div>' + bar(load.system_percent)) +
     row('IO ожидание', '<div class="val">' + num(load.iowait_percent, 1) + '%</div>' + bar(load.iowait_percent)) +
     row('Load', '<span class="val">' + num(load.load1, 2) + ' / ' + num(load.load5, 2) + ' / ' + num(load.load15, 2) + '</span>');
-  for (const c of load.per_core || [])
-    h += row('CPU' + c.id, '<span class="val ' + tc(c.percent) + '">' + num(c.percent, 1) + '%</span>');
+  h += cores((load.per_core || []).map(c => ['CPU' + c.id, '<span class="' + tc(c.percent) + '">' + num(c.percent, 1) + '%</span>']));
   return card('load', 'Нагрузка', h);
 }
 
@@ -111,8 +120,7 @@ function tempCard(temp) {
     h += section('Ядра') +
       row('Средняя', deg(avg)) +
       row('Мин / Макс', deg(Math.min(...v)) + ' / ' + deg(Math.max(...v))) +
-      '<tr><td colspan="2"><em>По ядрам:</em></td></tr>';
-    for (const s of temp.cores) h += '<tr><td style="padding-left:20px">' + esc(s.id) + '</td><td>' + deg(s.celsius) + '</td></tr>';
+      cores(temp.cores.map(s => [esc(s.id), deg(s.celsius)]));
   }
   if (temp.sensors && temp.sensors.length) {
     h += section('Датчики');
