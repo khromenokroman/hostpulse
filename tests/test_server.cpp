@@ -73,7 +73,7 @@ private:
 TEST_F(ServerTest, IndexPageServesDashboard) {
     auto html = get("/", "text/html");
     EXPECT_THAT(html, HasSubstr("<!DOCTYPE html>"));
-    EXPECT_THAT(html, HasSubstr("<title>System Info</title>"));
+    EXPECT_THAT(html, HasSubstr("<title>Состояние системы</title>"));
     EXPECT_THAT(html, HasSubstr("fetch('/api/all'")) << "дашборд должен забирать данные из /api/all";
     EXPECT_THAT(html, HasSubstr("</script>"));
     EXPECT_THAT(html, Not(HasSubstr("__DATA__"))) << "данные не должны вшиваться в страницу";

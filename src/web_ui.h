@@ -15,7 +15,7 @@ inline constexpr std::string_view kIndexHtml = R"HTML(<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>System Info</title>
+<title>Состояние системы</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
@@ -42,16 +42,13 @@ tr:hover { background: #1c2128; }
 .cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
 .core { background: #0d1117; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; }
 .core small { display: block; color: #8b949e; font-size: 0.85em; }
-.refresh { position: fixed; top: 10px; right: 15px; background: #238636; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em; }
-.refresh:hover { background: #2ea043; }
 .temp-critical { color: #f85149; font-weight: bold; }
 .temp-warn { color: #d29922; }
 .temp-ok { color: #3fb950; }
 </style>
 </head>
 <body>
-<button class="refresh" onclick="refresh()">Обновить</button>
-<h1>System Info</h1>
+<h1>Состояние системы</h1>
 <div class="status" id="status">Загрузка...</div>
 <noscript><div class="status error">Для дашборда нужен JavaScript</div></noscript>
 <div class="grid" id="content"></div>
@@ -190,9 +187,7 @@ function safe(fn, data, title) {
   }
 }
 
-let timer = null;
 async function refresh() {
-  clearTimeout(timer);
   const status = document.getElementById('status');
   try {
     const r = await fetch('/api/all', {cache: 'no-store'});
@@ -214,7 +209,7 @@ async function refresh() {
     status.textContent = 'Нет данных от сервера: ' + e.message;
     status.classList.add('error');
   } finally {
-    timer = setTimeout(refresh, REFRESH_MS);
+    setTimeout(refresh, REFRESH_MS);
   }
 }
 refresh();
