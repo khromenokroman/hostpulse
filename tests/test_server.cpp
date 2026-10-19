@@ -149,6 +149,25 @@ TEST_F(ServerTest, ExtraRoute) {
     EXPECT_EQ(j, nlohmann::json({{"extra", true}}));
 }
 
+/** Второй сервер на занятом порту не запускается (раньше SO_REUSEPORT позволял слушать вдвоём). */
+TEST_F(ServerTest, BusyPortFails) {
+    // stop_server() из теста не трогаем: глобальный сервер принадлежит фикстуре,
+    // поэтому проверяем на сыром сокете с теми же опциями, что ставит сервер
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(kPort);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    int rc = bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    int err = errno;
+    close(fd);
+    EXPECT_EQ(rc, -1) << "порт " << kPort << " удалось занять повторно — сервер слушает с SO_REUSEPORT?";
+    EXPECT_EQ(err, EADDRINUSE);
+}
+
 /** Неизвестный путь — 404, а не дашборд или пустой JSON. */
 TEST_F(ServerTest, UnknownPathIs404) {
     auto res = client_.Get("/api/nope");

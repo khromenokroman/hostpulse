@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <iostream>
 
 namespace hostpulse::server {
 
@@ -34,8 +35,9 @@ static void sampler_loop(collector::Sampler sampler) {
         if (!g_running) break;
         try {
             take_sample(sampler);
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
             // оставляем прошлый снимок, следующий замер попробует снова
+            std::cerr << "Ошибка сбора данных: " << e.what() << std::endl;
         }
     }
 }
@@ -50,6 +52,12 @@ static std::string snapshot_part(const std::string& key) {
 
 bool start_server(int port, const std::vector<Route>& extra_routes) {
     g_server = std::make_unique<httplib::Server>();
+    // httplib по умолчанию ставит SO_REUSEPORT: тогда второй экземпляр молча слушает
+    // тот же порт и делит с первым запросы. Оставляем только SO_REUSEADDR.
+    g_server->set_socket_options([](socket_t sock) {
+        int yes = 1;
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    });
     g_running = true;
 
     // первый замер до listen(), чтобы API сразу отдавал данные
