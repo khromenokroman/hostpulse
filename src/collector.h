@@ -7,7 +7,7 @@
 #include <chrono>
 #include <nlohmann/json.hpp>
 
-namespace sys_info::collector {
+namespace hostpulse::collector {
 
 /** @brief Датчик температуры (ID и значение в Цельсиях) */
 struct TempSensor {
@@ -383,4 +383,4 @@ inline void to_json(nlohmann::json& j, const SystemStatus& s) {
     };
 }
 
-} // namespace sys_info::collector
+} // namespace hostpulse::collector

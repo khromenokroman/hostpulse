@@ -7,7 +7,7 @@
 #include <chrono>
 #include <mutex>
 
-namespace sys_info::server {
+namespace hostpulse::server {
 
 static std::atomic<bool> g_running{false};
 static std::unique_ptr<httplib::Server> g_server;
@@ -92,4 +92,4 @@ void stop_server() {
     }
 }
 
-} // namespace sys_info::server
+} // namespace hostpulse::server

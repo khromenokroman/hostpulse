@@ -14,7 +14,7 @@
 
 namespace fs = std::filesystem;
 
-namespace sys_info::collector {
+namespace hostpulse::collector {
 
 // ------------------------------------------------------------------
 // Утилиты
@@ -661,4 +661,4 @@ SystemStatus Sampler::sample() {
     return status;
 }
 
-} // namespace sys_info::collector
+} // namespace hostpulse::collector

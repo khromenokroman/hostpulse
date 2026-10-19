@@ -7,7 +7,7 @@
 
 static void signal_handler(int sig) {
     (void)sig;
-    sys_info::server::stop_server();
+    hostpulse::server::stop_server();
 }
 
 int main(int argc, char* argv[]) {
@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
     // Если есть флаг --dump, просто вывести данные и выйти
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--dump") {
-            auto status = sys_info::collector::read_all();
+            auto status = hostpulse::collector::read_all();
             nlohmann::json j;
             nlohmann::to_json(j, status);
             std::cout << j.dump(2) << std::endl;
@@ -31,10 +31,10 @@ int main(int argc, char* argv[]) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    std::cout << "sys_info server starting on port " << port << std::endl;
+    std::cout << "hostpulse server starting on port " << port << std::endl;
     std::cout << "Open http://localhost:" << port << " in browser" << std::endl;
 
-    sys_info::server::start_server(port);
+    hostpulse::server::start_server(port);
 
     return 0;
 }

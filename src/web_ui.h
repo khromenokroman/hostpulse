@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace sys_info::server {
+namespace hostpulse::server {
 
 /**
  * @brief HTML-дашборд
@@ -218,4 +218,4 @@ refresh();
 </html>
 )HTML";
 
-} // namespace sys_info::server
+} // namespace hostpulse::server

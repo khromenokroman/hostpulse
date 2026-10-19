@@ -9,7 +9,7 @@
 #include <thread>
 #include <chrono>
 
-namespace sys_info::collector::test {
+namespace hostpulse::collector::test {
 
 TEST(CollectorTest, ReadTemperatures) {
     auto temp = read_temperatures();
@@ -181,4 +181,4 @@ TEST(SamplerTest, NetworkRateNonNegative) {
     }
 }
 
-} // namespace sys_info::collector::test
+} // namespace hostpulse::collector::test

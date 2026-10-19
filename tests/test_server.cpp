@@ -6,7 +6,7 @@
 #include <chrono>
 #include <thread>
 
-namespace sys_info::server::test {
+namespace hostpulse::server::test {
 
 using ::testing::HasSubstr;
 using ::testing::Not;
@@ -156,4 +156,4 @@ TEST_F(ServerTest, UnknownPathIs404) {
     EXPECT_EQ(res->status, 404);
 }
 
-} // namespace sys_info::server::test
+} // namespace hostpulse::server::test

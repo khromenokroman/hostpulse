@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(sys_info VERSION 0.1.0 LANGUAGES CXX)
+project(hostpulse VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,23 +32,23 @@ add_library(server STATIC
 target_include_directories(server PUBLIC src third_party)
 target_link_libraries(server PUBLIC collector OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 
-# sys_info executable
-add_executable(sys_info
+# hostpulse executable
+add_executable(hostpulse
     src/main.cpp
 )
-target_link_libraries(sys_info PRIVATE server)
+target_link_libraries(hostpulse PRIVATE server)
 
 # Tests
 if(BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
 
-    add_executable(sys_info_tests
+    add_executable(hostpulse_tests
         tests/test_collector.cpp
         tests/test_server.cpp
     )
-    target_link_libraries(sys_info_tests PRIVATE GTest::gtest_main server)
-    add_test(NAME sys_info_tests COMMAND sys_info_tests)
+    target_link_libraries(hostpulse_tests PRIVATE GTest::gtest_main server)
+    add_test(NAME hostpulse_tests COMMAND hostpulse_tests)
 
     # Синтаксис JS дашборда: при ошибке страница навсегда остаётся на «Загрузка...»
     find_program(NODE_EXECUTABLE NAMES node nodejs)

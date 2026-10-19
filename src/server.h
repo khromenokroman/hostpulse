@@ -4,7 +4,7 @@
 #include <functional>
 #include <vector>
 
-namespace sys_info::server {
+namespace hostpulse::server {
 
 using Handler = std::function<std::string()>;
 
@@ -25,4 +25,4 @@ bool start_server(int port = 8080, const std::vector<Route>& routes = {});
 /** @brief Остановить сервер; можно вызывать из обработчика сигнала */
 void stop_server();
 
-} // namespace sys_info::server
+} // namespace hostpulse::server
