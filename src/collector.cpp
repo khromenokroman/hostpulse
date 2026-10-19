@@ -20,7 +20,8 @@ namespace sys_info::collector {
 // Утилиты
 // ------------------------------------------------------------------
 
-static std::string read_file(const fs::path& p) {
+/** @brief Первое слово файла (для числовых значений sysfs) */
+static std::string read_word(const fs::path& p) {
     std::ifstream f(p);
     if (!f.is_open()) return {};
     std::string s;
@@ -28,6 +29,7 @@ static std::string read_file(const fs::path& p) {
     return s;
 }
 
+/** @brief Первая строка файла целиком (для имён и меток, в них бывают пробелы) */
 static std::string read_line(const fs::path& p) {
     std::ifstream f(p);
     if (!f.is_open()) return {};
@@ -36,22 +38,37 @@ static std::string read_line(const fs::path& p) {
     return line;
 }
 
-static std::string read_full(const fs::path& p) {
-    std::ifstream f(p);
-    if (!f.is_open()) return {};
-    std::string s;
-    std::getline(f, s);
-    return s;
+/** @brief Целое из файла; 0, если файла нет или там не число */
+static int read_int(const fs::path& p) {
+    try {
+        return std::stoi(read_word(p));
+    } catch (...) {
+        return 0;
+    }
 }
 
 static float celsius_from_millideg(int32_t millideg) {
     return millideg / 1000.0f;
 }
 
-static uint64_t read_uint(const fs::path& p) {
-    auto s = read_file(p);
-    if (s.empty()) return 0;
-    return std::stoull(s);
+/**
+ * @brief Номера N всех файлов <prefix>N_input в каталоге hwmon, по возрастанию
+ *
+ * Номера идут не подряд (у coretemp: temp1, temp10, temp14, ...),
+ * поэтому перебирать 1, 2, 3... до первого пропуска нельзя.
+ */
+static std::vector<int> hwmon_indices(const fs::path& base, const std::string& prefix) {
+    std::vector<int> result;
+    std::error_code ec;
+    for (const auto& e : fs::directory_iterator(base, ec)) {
+        auto name = e.path().filename().string();
+        if (name.rfind(prefix, 0) != 0 || !name.ends_with("_input")) continue;
+        auto num = name.substr(prefix.size(), name.size() - prefix.size() - 6);
+        if (num.empty() || !std::all_of(num.begin(), num.end(), ::isdigit)) continue;
+        result.push_back(std::stoi(num));
+    }
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 static std::string trim(const std::string& s) {
@@ -74,80 +91,61 @@ TempData read_temperatures() {
         if (name.rfind("hwmon", 0) != 0) continue;
 
         fs::path base = entry.path();
-        std::string hwmon_name = read_full(base / "name");
+        std::string hwmon_name = read_line(base / "name");
         if (hwmon_name.empty()) continue;
 
-        for (int i = 1; ; ++i) {
-            auto temp_file = base / ("temp" + std::to_string(i) + "_input");
-            auto temp_max_file = base / ("temp" + std::to_string(i) + "_max");
-            auto temp_crit_file = base / ("temp" + std::to_string(i) + "_crit");
-
-            auto val_str = read_file(temp_file);
-            if (val_str.empty()) break;
+        for (int i : hwmon_indices(base, "temp")) {
+            auto idx = "temp" + std::to_string(i);
+            auto val_str = read_word(base / (idx + "_input"));
+            if (val_str.empty()) continue;
 
             try {
-                int32_t raw = std::stoi(val_str);
-                float c = celsius_from_millideg(raw);
-
-             std::string label;
-                std::string source;
-                auto temp_label_file = base / ("temp" + std::to_string(i) + "_label");
-                auto temp_label = read_file(temp_label_file);
+                float c = celsius_from_millideg(std::stoi(val_str));
+                auto temp_label = read_line(base / (idx + "_label"));
+                std::string label;
 
                 if (hwmon_name == "coretemp") {
-                    if (i == 1) {
+                    if (temp_label.rfind("Package", 0) == 0) {
                         label = "Температура пакета";
                         data.package.emplace_back(label, c);
-                        source = "coretemp";
                     } else {
                         label = temp_label.empty() ? ("Ядро " + std::to_string(i - 1)) : temp_label;
                         data.cores.emplace_back(label, c);
-                        source = "coretemp";
                     }
                 } else if (hwmon_name == "nvme") {
                     label = temp_label.empty() ? "NVMe" : temp_label;
                     data.sensors.emplace_back(label, c);
-                    source = "nvme";
                 } else if (hwmon_name == "acpitz") {
                     label = "Материнская плата";
                     data.sensors.emplace_back(label, c);
-                    source = "acpitz";
                 } else if (hwmon_name == "nct6687") {
                     if (i == 1) {
                         label = temp_label.empty() ? "Чипсет" : temp_label;
-                        data.sensors.emplace_back(label, c);
-                        source = "nct6687";
-                    } else if (i >= 2 && i <= 7) {
+                    } else if (i <= 7) {
                         label = temp_label.empty() ? ("Датчик " + std::to_string(i)) : temp_label;
-                        data.sensors.emplace_back(label, c);
-                        source = "nct6687";
                     } else {
-                        source = "";
+                        continue;
                     }
+                    data.sensors.emplace_back(label, c);
                 } else if (hwmon_name == "drivetemp") {
                     label = temp_label.empty() ? "SSD/SDD" : temp_label;
                     data.sensors.emplace_back(label, c);
-                    source = "drivetemp";
                 } else {
                     label = temp_label.empty() ? hwmon_name : temp_label;
                     data.sensors.emplace_back(label, c);
-                    source = hwmon_name;
                 }
 
-                if (!source.empty()) {
-                    auto max_str = read_file(temp_max_file);
-                    if (!max_str.empty()) {
-                        data.max_sensors[label] = std::stof(max_str) / 1000.0f;
-                    }
-
-                    auto crit_str = read_file(temp_crit_file);
-                    if (!crit_str.empty()) {
-                        data.crit_sensors[label] = std::stof(crit_str) / 1000.0f;
-                    }
+                auto max_str = read_word(base / (idx + "_max"));
+                if (!max_str.empty()) {
+                    data.max_sensors[label] = std::stof(max_str) / 1000.0f;
                 }
 
+                auto crit_str = read_word(base / (idx + "_crit"));
+                if (!crit_str.empty()) {
+                    data.crit_sensors[label] = std::stof(crit_str) / 1000.0f;
+                }
             } catch (...) {
-                break;
+                continue;
             }
         }
     }
@@ -156,8 +154,8 @@ TempData read_temperatures() {
     fs::path thermal_dir("/sys/class/thermal");
     if (fs::exists(thermal_dir)) {
         for (const auto& tz : fs::directory_iterator(thermal_dir)) {
-            auto type = read_full(tz.path() / "type");
-            auto temp_str = read_file(tz.path() / "temp");
+            auto type = read_line(tz.path() / "type");
+            auto temp_str = read_word(tz.path() / "temp");
             if (type.rfind("nvme", 0) == 0 && !temp_str.empty()) {
                 try {
                     float c = std::stoi(temp_str) / 1000.0f;
@@ -167,8 +165,9 @@ TempData read_temperatures() {
         }
     }
 
-    std::sort(data.cores.begin(), data.cores.end(),
-              [](const auto& a, const auto& b) { return a.id < b.id; });
+    std::sort(data.cores.begin(), data.cores.end(), [](const auto& a, const auto& b) {
+        return a.id.size() != b.id.size() ? a.id.size() < b.id.size() : a.id < b.id;
+    });
     std::sort(data.sensors.begin(), data.sensors.end(),
               [](const auto& a, const auto& b) { return a.id < b.id; });
 
@@ -189,31 +188,27 @@ FanData read_fans() {
         if (name.rfind("hwmon", 0) != 0) continue;
 
         fs::path base = entry.path();
-        std::string hwmon_name = read_full(base / "name");
+        std::string hwmon_name = read_line(base / "name");
         if (hwmon_name.empty()) continue;
 
-        for (int i = 1; ; ++i) {
-            auto fan_file = base / ("fan" + std::to_string(i) + "_input");
-            auto val_str = read_file(fan_file);
-            if (val_str.empty()) break;
+        for (int i : hwmon_indices(base, "fan")) {
+            auto idx = "fan" + std::to_string(i);
+            try {
+                int rpm = std::stoi(read_word(base / (idx + "_input")));
+                if (rpm <= 0) continue;
 
-                  try {
-                        int rpm = std::stoi(val_str);
-                        if (rpm > 0) {
-                            auto fan_label_file = base / ("fan" + std::to_string(i) + "_label");
-                            auto fan_label = read_file(fan_label_file);
-                            std::string label;
-                            if (hwmon_name == "nct6687") {
-                                label = fan_label.empty() ? ("Вентилятор " + std::to_string(i)) : fan_label;
-                            } else if (hwmon_name == "coretemp") {
-                                label = "Вентилятор CPU";
-                            } else {
-                                label = fan_label.empty() ? (hwmon_name + " fan" + std::to_string(i)) : fan_label;
-                            }
-                            data.fans.emplace_back(label, rpm);
-                        }
-                    } catch (...) {
-                break;
+                auto fan_label = read_line(base / (idx + "_label"));
+                std::string label;
+                if (hwmon_name == "nct6687") {
+                    label = fan_label.empty() ? ("Вентилятор " + std::to_string(i)) : fan_label;
+                } else if (hwmon_name == "coretemp") {
+                    label = "Вентилятор CPU";
+                } else {
+                    label = fan_label.empty() ? (hwmon_name + " fan" + std::to_string(i)) : fan_label;
+                }
+                data.fans.emplace_back(label, rpm);
+            } catch (...) {
+                continue;
             }
         }
     }
@@ -257,28 +252,28 @@ static void read_scaling_freq(CpuInfo& info) {
     fs::path cpu0("/sys/devices/system/cpu/cpu0/cpufreq");
     if (!fs::exists(cpu0)) return;
 
-    auto cur = read_file(cpu0 / "scaling_cur_freq");
+    auto cur = read_word(cpu0 / "scaling_cur_freq");
     if (!cur.empty()) {
         int freq_khz = std::stoi(cur);
         info.current_mhz.push_back(freq_khz / 1000.0f);
     }
 
-    auto max_f = read_file(cpu0 / "scaling_max_freq");
+    auto max_f = read_word(cpu0 / "scaling_max_freq");
     if (!max_f.empty()) {
         info.max_mhz = std::stoi(max_f) / 1000.0f;
     }
 
-    auto min_f = read_file(cpu0 / "scaling_min_freq");
+    auto min_f = read_word(cpu0 / "scaling_min_freq");
     if (!min_f.empty()) {
         info.min_mhz = std::stoi(min_f) / 1000.0f;
     }
 
-    auto gov = read_full(cpu0 / "scaling_governor");
+    auto gov = read_line(cpu0 / "scaling_governor");
     if (!gov.empty()) {
         info.governor = gov;
     }
 
-    auto drv = read_full(cpu0 / "scaling_driver");
+    auto drv = read_line(cpu0 / "scaling_driver");
     if (!drv.empty()) {
         info.driver = drv;
     }
@@ -306,7 +301,7 @@ static CpuLoad read_cpu_load_raw() {
     std::string cpu_tag;
     iss >> cpu_tag;
 
-    uint64_t user, nice, system, idle, iowait, irq, softirq, steal;
+    uint64_t user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
     iss >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal;
 
     CpuLoad load{};
@@ -340,12 +335,14 @@ static CpuLoad read_cpu_load_per_core() {
         iss >> tag;
         if (tag.rfind("cpu", 0) != 0 || tag == "cpu") continue;
 
-        uint64_t user, nice, system, idle, iowait, irq, softirq, steal;
+        uint64_t user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
         iss >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal;
 
         uint64_t t = user + nice + system + idle + iowait + irq + softirq + steal;
         int core_id = std::stoi(tag.substr(3));
-        total.per_core.push_back({core_id, t - idle - iowait, t});
+        uint64_t active = t - idle - iowait;
+        float percent = t > 0 ? static_cast<float>(active) / static_cast<float>(t) * 100.0f : 0.0f;
+        total.per_core.push_back({core_id, active, t, percent});
     }
 
     return total;
@@ -433,18 +430,16 @@ DiskInfo read_disk_info() {
         std::string line;
         while (std::getline(f, line)) {
             std::istringstream iss(line);
-            uint32_t major, minor;
+            uint32_t major = 0, minor = 0;
             std::string name;
-            uint64_t reads, merged_reads, sectors_read, write_time;
-            uint64_t writes, merged_writes, sectors_written, io_in_progress;
-            uint64_t io_time, io_time2;
+            uint64_t reads = 0, merged_reads = 0, sectors_read = 0, read_time = 0;
+            uint64_t writes = 0, merged_writes = 0, sectors_written = 0, write_time = 0;
 
             iss >> major >> minor >> name;
             if (name.empty()) continue;
 
-            iss >> reads >> merged_reads >> sectors_read >> write_time
-                >> writes >> merged_writes >> sectors_written >> io_in_progress
-                >> io_time >> io_time2;
+            iss >> reads >> merged_reads >> sectors_read >> read_time
+                >> writes >> merged_writes >> sectors_written >> write_time;
 
             if (reads == 0 && writes == 0) continue;
 
@@ -501,7 +496,7 @@ DiskInfo read_disk_info() {
         for (const auto& disk : fs::directory_iterator(block_dir)) {
             auto disk_name = disk.path().filename().string();
             auto size_file = disk.path() / "size";
-            auto size_str = read_file(size_file);
+            auto size_str = read_word(size_file);
             if (!size_str.empty()) {
                 try {
                     uint64_t sectors = std::stoull(size_str);
@@ -525,7 +520,7 @@ HardwareInfo read_hardware_info() {
     auto read_dmi = [](const char* file) -> std::string {
         fs::path p("/sys/class/dmi/id/");
         p /= file;
-        return read_full(p);
+        return read_line(p);
     };
 
     info.board_vendor = read_dmi("board_vendor");
@@ -538,10 +533,11 @@ HardwareInfo read_hardware_info() {
 
     fs::path bat_dir("/sys/class/power_supply/BAT0");
     if (fs::exists(bat_dir)) {
-        info.battery.capacity = std::stoi(read_file(bat_dir / "capacity"));
-        info.battery.full_design = std::stoi(read_file(bat_dir / "energy_full_design"));
-        info.battery.full_now = std::stoi(read_file(bat_dir / "energy_full"));
-        info.battery.status = read_full(bat_dir / "status");
+        const char* kind = fs::exists(bat_dir / "energy_full") ? "energy" : "charge";
+        info.battery.capacity = read_int(bat_dir / "capacity");
+        info.battery.full_design = read_int(bat_dir / (std::string(kind) + "_full_design"));
+        info.battery.full_now = read_int(bat_dir / (std::string(kind) + "_full"));
+        info.battery.status = read_line(bat_dir / "status");
     }
 
     auto run_lspci = []() -> std::string {
@@ -567,35 +563,22 @@ HardwareInfo read_hardware_info() {
 
     fs::path net_dir("/sys/class/net");
     if (fs::exists(net_dir)) {
-        static std::map<std::string, std::pair<uint64_t, uint64_t>> prev_rates;
         for (const auto& iface : fs::directory_iterator(net_dir)) {
             std::string name = iface.path().filename().string();
             if (name == "lo") continue;
 
             auto& n = info.network[name];
             n.name = name;
-            n.type = read_full(iface.path() / "type");
-            n.mac = read_full(iface.path() / "address");
+            n.type = read_line(iface.path() / "type");
+            n.mac = read_line(iface.path() / "address");
 
-            auto speed = read_file(iface.path() / "speed");
-            if (!speed.empty()) {
-                n.speed_mbps = std::stoi(speed);
-            }
+            // у Wi-Fi и опущенных интерфейсов speed не читается или равен -1
+            n.speed_mbps = std::max(read_int(iface.path() / "speed"), 0);
 
-            auto rx = read_file(iface.path() / "statistics/rx_bytes");
-            auto tx = read_file(iface.path() / "statistics/tx_bytes");
-            if (!rx.empty()) n.rx_bytes = std::stoull(rx);
-            if (!tx.empty()) n.tx_bytes = std::stoull(tx);
-
-            auto pr = prev_rates[name];
-            if (pr.first > 0 && pr.second > 0) {
-                uint64_t dt = 1;
-                double rx_bits = (n.rx_bytes - pr.first) * 8.0;
-                double tx_bits = (n.tx_bytes - pr.second) * 8.0;
-                n.rate_rx_mbps = static_cast<float>(rx_bits / (dt * 1000000.0));
-                n.rate_tx_mbps = static_cast<float>(tx_bits / (dt * 1000000.0));
-            }
-            prev_rates[name] = {n.rx_bytes, n.tx_bytes};
+            try {
+                n.rx_bytes = std::stoull(read_word(iface.path() / "statistics/rx_bytes"));
+                n.tx_bytes = std::stoull(read_word(iface.path() / "statistics/tx_bytes"));
+            } catch (...) {}
         }
     }
 
@@ -618,6 +601,63 @@ SystemStatus read_all() {
     status.disk = read_disk_info();
     status.hw = read_hardware_info();
     status.timestamp = std::chrono::system_clock::now();
+    return status;
+}
+
+// ------------------------------------------------------------------
+// Sampler
+// ------------------------------------------------------------------
+
+static float delta_percent(uint64_t cur, uint64_t prev, uint64_t total_delta) {
+    if (total_delta == 0 || cur < prev) return 0.0f;
+    return static_cast<float>(cur - prev) / static_cast<float>(total_delta) * 100.0f;
+}
+
+static void apply_load_delta(CpuLoad& cur, const CpuLoad& prev) {
+    if (cur.total > prev.total) {
+        uint64_t dt = cur.total - prev.total;
+        cur.active_percent = delta_percent(cur.active, prev.active, dt);
+        cur.user_percent = delta_percent(cur.user + cur.nice, prev.user + prev.nice, dt);
+        cur.system_percent = delta_percent(cur.system, prev.system, dt);
+        cur.idle_percent = delta_percent(cur.idle, prev.idle, dt);
+        cur.iowait_percent = delta_percent(cur.iowait, prev.iowait, dt);
+    }
+
+    for (auto& core : cur.per_core) {
+        auto it = std::find_if(prev.per_core.begin(), prev.per_core.end(),
+                               [&](const auto& p) { return p.id == core.id; });
+        if (it == prev.per_core.end() || core.total <= it->total) continue;
+        core.percent = delta_percent(core.active, it->active, core.total - it->total);
+    }
+}
+
+SystemStatus Sampler::sample() {
+    auto status = read_all();
+    auto now = std::chrono::steady_clock::now();
+
+    if (has_prev_) {
+        apply_load_delta(status.load, prev_load_);
+
+        double seconds = std::chrono::duration<double>(now - prev_time_).count();
+        for (auto& [name, n] : status.hw.network) {
+            auto it = prev_net_.find(name);
+            if (seconds <= 0 || it == prev_net_.end()) continue;
+            // счётчики сбрасываются при пересоздании интерфейса
+            if (n.rx_bytes < it->second.first || n.tx_bytes < it->second.second) continue;
+            n.prev_rx = it->second.first;
+            n.prev_tx = it->second.second;
+            n.rate_rx_mbps = static_cast<float>((n.rx_bytes - n.prev_rx) * 8.0 / seconds / 1e6);
+            n.rate_tx_mbps = static_cast<float>((n.tx_bytes - n.prev_tx) * 8.0 / seconds / 1e6);
+        }
+    }
+
+    prev_load_ = status.load;
+    prev_net_.clear();
+    for (const auto& [name, n] : status.hw.network) {
+        prev_net_[name] = {n.rx_bytes, n.tx_bytes};
+    }
+    prev_time_ = now;
+    has_prev_ = true;
     return status;
 }
 

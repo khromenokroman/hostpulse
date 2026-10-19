@@ -18,7 +18,8 @@
 - C++20
 - nlohmann_json
 - fmt
-- GoogleTest (опционально)
+- GoogleTest (опционально, для тестов)
+- Node.js (опционально, проверка синтаксиса JS дашборда в ctest)
 
 ## Сборка
 
@@ -47,21 +48,31 @@ cmake --build .
 | `/api/mem`   | Память               |
 | `/api/disk`  | Диски и разделы      |
 | `/api/hw`    | Оборудование         |
-| `/api/all`   | Всё целиком         |
+| `/api/all`   | Всё целиком: `{cpu, load, temp, fans, mem, disk, hw, timestamp}` |
 | `/api/health`| То же что `/api/all` |
 | `/`          | HTML-дашборд         |
+
+Данные снимает фоновый поток раз в секунду, API отдаёт последний снимок.
+Загрузка CPU (`active_percent`, `per_core[].percent`) и скорость сети
+(`rate_rx_mbps`, `rate_tx_mbps`) посчитаны за интервал между замерами.
 
 ## Тесты
 
 ```bash
-cmake --build . --target sys_info_tests
-./sys_info_tests
+cmake --build .
+ctest --output-on-failure
 ```
+
+- `sys_info_tests` — юнит-тесты сборщика и интеграционные тесты HTTP-сервера (порт 18080)
+- `web_ui_js_syntax` — `node --check` скрипта дашборда (если найден node)
 
 ## Структура
 
 - `src/collector.h` — структуры данных и to_json
 - `src/collector.cpp` — чтение /sys, /proc
-- `src/server.cpp` — HTTP-сервер, HTML-дашборд
+- `src/server.cpp` — HTTP-сервер, фоновый поток замеров
+- `src/web_ui.h` — HTML/CSS/JS дашборда
 - `src/main.cpp` — точка входа
-- `tests/test_collector.cpp` — юнит-тесты
+- `tests/test_collector.cpp` — юнит-тесты сборщика и Sampler
+- `tests/test_server.cpp` — интеграционные тесты HTTP API и дашборда
+- `tests/check_web_ui_js.cmake` — проверка синтаксиса JS дашборда

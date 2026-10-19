@@ -71,6 +71,7 @@ struct CpuLoad {
         int id = 0;
         uint64_t active = 0;
         uint64_t total = 0;
+        float percent = 0.0f;
     };
     std::vector<CoreLoad> per_core;
 };
@@ -169,6 +170,25 @@ struct SystemStatus {
 /** @brief Считать все данные системы */
 SystemStatus read_all();
 
+/**
+ * @brief Сборщик с состоянием: загрузка CPU и скорость сети по разнице между замерами
+ *
+ * read_cpu_load() отдаёт проценты с момента загрузки системы, а скорость сети без
+ * предыдущего замера не посчитать. Sampler помнит прошлый замер и пересчитывает
+ * эти поля за интервал между вызовами sample(). Не потокобезопасен.
+ */
+class Sampler {
+public:
+    /** @brief Снять все данные и пересчитать загрузку CPU и скорость сети за интервал */
+    SystemStatus sample();
+
+private:
+    CpuLoad prev_load_;
+    std::map<std::string, std::pair<uint64_t, uint64_t>> prev_net_;
+    std::chrono::steady_clock::time_point prev_time_;
+    bool has_prev_ = false;
+};
+
 /** @brief Считать температуры (hwmon + thermal zones) */
 TempData read_temperatures();
 
@@ -236,7 +256,8 @@ inline void to_json(nlohmann::json& j, const CpuLoad::CoreLoad& c) {
     j = nlohmann::json{
         {"id", c.id},
         {"active", c.active},
-        {"total", c.total}
+        {"total", c.total},
+        {"percent", c.percent}
     };
 }
 

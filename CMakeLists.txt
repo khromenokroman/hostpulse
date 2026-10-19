@@ -15,26 +15,51 @@ find_package(fmt REQUIRED)
 # OpenSSL
 find_package(OpenSSL REQUIRED)
 
+find_package(Threads REQUIRED)
+
+# collector static library
+add_library(collector STATIC
+    src/collector.cpp
+)
+target_include_directories(collector PUBLIC src)
+target_link_libraries(collector PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(collector PRIVATE fmt::fmt)
+
+# server static library (HTTP + дашборд)
+add_library(server STATIC
+    src/server.cpp
+)
+target_include_directories(server PUBLIC src third_party)
+target_link_libraries(server PUBLIC collector OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+
 # sys_info executable
 add_executable(sys_info
     src/main.cpp
-    src/collector.cpp
-    src/server.cpp
 )
-target_include_directories(sys_info PRIVATE src third_party)
-target_link_libraries(sys_info PRIVATE OpenSSL::SSL OpenSSL::Crypto pthread)
-target_link_libraries(sys_info PRIVATE    nlohmann_json::nlohmann_json fmt::fmt)
+target_link_libraries(sys_info PRIVATE server)
 
 # Tests
 if(BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
+
     add_executable(sys_info_tests
         tests/test_collector.cpp
+        tests/test_server.cpp
     )
-    target_include_directories(sys_info_tests PRIVATE src third_party)
-    target_link_libraries(sys_info_tests PRIVATE GTest::gtest_main GTest::gtest
-        OpenSSL::SSL OpenSSL::Crypto pthread)
-    target_link_libraries(sys_info_tests PRIVATE    nlohmann_json::nlohmann_json fmt::fmt)
+    target_link_libraries(sys_info_tests PRIVATE GTest::gtest_main server)
     add_test(NAME sys_info_tests COMMAND sys_info_tests)
+
+    # Синтаксис JS дашборда: при ошибке страница навсегда остаётся на «Загрузка...»
+    find_program(NODE_EXECUTABLE NAMES node nodejs)
+    if(NODE_EXECUTABLE)
+        add_test(NAME web_ui_js_syntax
+            COMMAND ${CMAKE_COMMAND}
+                -DNODE=${NODE_EXECUTABLE}
+                -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/src/web_ui.h
+                -DOUT=${CMAKE_CURRENT_BINARY_DIR}/web_ui.js
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_web_ui_js.cmake)
+    else()
+        message(STATUS "node не найден: проверка JS дашборда пропущена")
+    endif()
 endif()

@@ -5,11 +5,8 @@
 #include <csignal>
 #include <cstdlib>
 
-static bool g_running = true;
-
 static void signal_handler(int sig) {
     (void)sig;
-    g_running = false;
     sys_info::server::stop_server();
 }
 
