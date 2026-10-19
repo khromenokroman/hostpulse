@@ -1,0 +1,32 @@
+[Unit]
+Description=hostpulse: состояние компьютера в браузере
+Documentation=https://github.com/khromenokroman/hostpulse
+After=network.target
+
+[Service]
+DynamicUser=yes
+User=hostpulse
+EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/hostpulse
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/hostpulse $HOSTPULSE_OPTS
+Restart=on-failure
+# только чтение /proc и /sys; /home нужен для свободного места на разделе
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

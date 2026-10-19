@@ -1,0 +1,15 @@
+#!/bin/sh
+# Снятие службы. Своих данных у hostpulse нет: purge удаляет только настройки.
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = "remove" ]; then
+    deb-systemd-helper mask hostpulse.service >/dev/null || true
+fi
+if [ "$1" = "purge" ]; then
+    deb-systemd-helper purge hostpulse.service >/dev/null || true
+    deb-systemd-helper unmask hostpulse.service >/dev/null || true
+fi
+exit 0

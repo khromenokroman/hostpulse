@@ -1,0 +1,22 @@
+#!/bin/sh
+# Включение и (пере)запуск службы.
+set -e
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    # как dh_installsystemd: служба включается при установке, выключенная администратором - остаётся выключенной
+    deb-systemd-helper unmask hostpulse.service >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled hostpulse.service; then
+        deb-systemd-helper enable hostpulse.service >/dev/null || true
+    else
+        deb-systemd-helper update-state hostpulse.service >/dev/null || true
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if [ -n "$2" ]; then
+            deb-systemd-invoke restart hostpulse.service >/dev/null
+        else
+            deb-systemd-invoke start hostpulse.service >/dev/null
+        fi
+    fi
+fi
+exit 0
