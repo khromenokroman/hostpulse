@@ -1,10 +1,11 @@
-#include "server.h"
-#include "collector.h"
-#include <iostream>
-#include <thread>
 #include <csignal>
 #include <cstdlib>
+#include <iostream>
 #include <string>
+#include <thread>
+
+#include "collector.h"
+#include "server.h"
 
 static void signal_handler(int sig) {
     (void)sig;
@@ -15,9 +16,14 @@ static void print_usage(const char* prog) {
     std::cout << "hostpulse — состояние компьютера в браузере: нагрузка, температуры, память, диски, сеть\n"
                  "\n"
                  "Использование:\n"
-                 "  " << prog << " [ПОРТ]    запустить веб-дашборд (порт по умолчанию 8080)\n"
-                 "  " << prog << " --dump    вывести все данные в JSON и выйти\n"
-                 "  " << prog << " --help    показать эту справку\n";
+                 "  "
+              << prog
+              << " [ПОРТ]    запустить веб-дашборд (порт по умолчанию 8080)\n"
+                 "  "
+              << prog
+              << " --dump    вывести все данные в JSON и выйти\n"
+                 "  "
+              << prog << " --help    показать эту справку\n";
 }
 
 /** @brief Номер порта 1..65535 из строки; 0, если строка не порт */
@@ -54,8 +60,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signal_handler);
 
     std::cout << "hostpulse: запуск сервера на порту " << port << "\n"
-              << "Откройте в браузере: http://localhost:" << port
-              << " (с других компьютеров сети — по IP этой машины)\n"
+              << "Откройте в браузере: http://localhost:" << port << " (с других компьютеров сети — по IP этой машины)\n"
               << "Остановить: Ctrl+C" << std::endl;
 
     if (!hostpulse::server::start_server(port)) {

@@ -1,11 +1,11 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
+#include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <map>
-#include <cstdint>
-#include <chrono>
-#include <nlohmann/json.hpp>
 
 namespace hostpulse::collector {
 
@@ -102,8 +102,8 @@ struct DiskInfo {
         uint64_t write_ios = 0;
         uint64_t read_sectors = 0;
         uint64_t write_sectors = 0;
-        std::string model;  ///< модель из /sys/block/X/device/model
-        std::string kind;   ///< NVMe / SSD / HDD; пусто у виртуальных (loop, dm, zram) и разделов
+        std::string model; ///< модель из /sys/block/X/device/model
+        std::string kind;  ///< NVMe / SSD / HDD; пусто у виртуальных (loop, dm, zram) и разделов
     };
 
     struct Mount {
@@ -132,7 +132,7 @@ struct BatteryInfo {
 struct NetworkInfo {
     std::string name;
     std::string type;
-    std::string kind;  ///< Wi-Fi / Ethernet; пусто у виртуальных (docker, veth, мосты)
+    std::string kind; ///< Wi-Fi / Ethernet; пусто у виртуальных (docker, veth, мосты)
     std::string mac;
     int speed_mbps = 0;
     uint64_t rx_bytes = 0;
@@ -181,11 +181,11 @@ SystemStatus read_all();
  * эти поля за интервал между вызовами sample(). Не потокобезопасен.
  */
 class Sampler {
-public:
+   public:
     /** @brief Снять все данные и пересчитать загрузку CPU и скорость сети за интервал */
     SystemStatus sample();
 
-private:
+   private:
     CpuLoad prev_load_;
     std::map<std::string, std::pair<uint64_t, uint64_t>> prev_net_;
     std::chrono::steady_clock::time_point prev_time_;
@@ -214,179 +214,119 @@ DiskInfo read_disk_info();
 HardwareInfo read_hardware_info();
 
 // JSON сериализация
-template<typename K, typename V>
+template <typename K, typename V>
 inline void to_json(nlohmann::json& j, const std::map<K, V>& m) {
     j = nlohmann::json::object();
     for (auto& [k, v] : m) j[k] = v;
 }
 
-inline void to_json(nlohmann::json& j, const TempSensor& s) {
-    j = nlohmann::json{{"id", s.id}, {"celsius", s.celsius}};
-}
+inline void to_json(nlohmann::json& j, const TempSensor& s) { j = nlohmann::json{{"id", s.id}, {"celsius", s.celsius}}; }
 
-inline void to_json(nlohmann::json& j, const FanSensor& f) {
-    j = nlohmann::json{{"id", f.id}, {"rpm", f.rpm}};
-}
+inline void to_json(nlohmann::json& j, const FanSensor& f) { j = nlohmann::json{{"id", f.id}, {"rpm", f.rpm}}; }
 
 inline void to_json(nlohmann::json& j, const TempData& t) {
     j = nlohmann::json{
-        {"package", t.package},
-        {"cores", t.cores},
-        {"sensors", t.sensors},
-        {"max_sensors", t.max_sensors},
-        {"crit_sensors", t.crit_sensors}
-    };
+        {"package", t.package}, {"cores", t.cores}, {"sensors", t.sensors}, {"max_sensors", t.max_sensors}, {"crit_sensors", t.crit_sensors}};
 }
 
-inline void to_json(nlohmann::json& j, const FanData& f) {
-    j = nlohmann::json{{"fans", f.fans}};
-}
+inline void to_json(nlohmann::json& j, const FanData& f) { j = nlohmann::json{{"fans", f.fans}}; }
 
 inline void to_json(nlohmann::json& j, const CpuInfo& c) {
-    j = nlohmann::json{
-        {"model", c.model},
-        {"logical_cores", c.logical_cores},
-        {"physical_cores", c.physical_cores},
-        {"current_mhz", c.current_mhz},
-        {"min_mhz", c.min_mhz},
-        {"max_mhz", c.max_mhz},
-        {"governor", c.governor},
-        {"driver", c.driver}
-    };
+    j = nlohmann::json{{"model", c.model},
+                       {"logical_cores", c.logical_cores},
+                       {"physical_cores", c.physical_cores},
+                       {"current_mhz", c.current_mhz},
+                       {"min_mhz", c.min_mhz},
+                       {"max_mhz", c.max_mhz},
+                       {"governor", c.governor},
+                       {"driver", c.driver}};
 }
 
 inline void to_json(nlohmann::json& j, const CpuLoad::CoreLoad& c) {
-    j = nlohmann::json{
-        {"id", c.id},
-        {"active", c.active},
-        {"total", c.total},
-        {"percent", c.percent}
-    };
+    j = nlohmann::json{{"id", c.id}, {"active", c.active}, {"total", c.total}, {"percent", c.percent}};
 }
 
 inline void to_json(nlohmann::json& j, const CpuLoad& l) {
-    j = nlohmann::json{
-        {"total", l.total},
-        {"active", l.active},
-        {"active_percent", l.active_percent},
-        {"user_percent", l.user_percent},
-        {"system_percent", l.system_percent},
-        {"idle_percent", l.idle_percent},
-        {"iowait_percent", l.iowait_percent},
-        {"user", l.user},
-        {"nice", l.nice},
-        {"system", l.system},
-        {"idle", l.idle},
-        {"iowait", l.iowait},
-        {"irq", l.irq},
-        {"softirq", l.softirq},
-        {"steal", l.steal},
-        {"load1", l.load1},
-        {"load5", l.load5},
-        {"load15", l.load15},
-        {"per_core", l.per_core}
-    };
+    j = nlohmann::json{{"total", l.total},
+                       {"active", l.active},
+                       {"active_percent", l.active_percent},
+                       {"user_percent", l.user_percent},
+                       {"system_percent", l.system_percent},
+                       {"idle_percent", l.idle_percent},
+                       {"iowait_percent", l.iowait_percent},
+                       {"user", l.user},
+                       {"nice", l.nice},
+                       {"system", l.system},
+                       {"idle", l.idle},
+                       {"iowait", l.iowait},
+                       {"irq", l.irq},
+                       {"softirq", l.softirq},
+                       {"steal", l.steal},
+                       {"load1", l.load1},
+                       {"load5", l.load5},
+                       {"load15", l.load15},
+                       {"per_core", l.per_core}};
 }
 
 inline void to_json(nlohmann::json& j, const MemInfo& m) {
     j = nlohmann::json{
-        {"total", m.total},
-        {"used", m.used},
-        {"used_percent", m.used_percent},
-        {"free", m.free},
-        {"available", m.available},
-        {"buffers", m.buffers},
-        {"cached", m.cached},
-        {"swap_total", m.swap_total},
-        {"swap_used", m.swap_used},
-        {"swap_percent", m.swap_percent}
-    };
+        {"total", m.total},     {"used", m.used},     {"used_percent", m.used_percent}, {"free", m.free},           {"available", m.available},
+        {"buffers", m.buffers}, {"cached", m.cached}, {"swap_total", m.swap_total},     {"swap_used", m.swap_used}, {"swap_percent", m.swap_percent}};
 }
 
 inline void to_json(nlohmann::json& j, const DiskInfo::Disk& d) {
-    j = nlohmann::json{
-        {"name", d.name},
-        {"size_bytes", d.size_bytes},
-        {"read_bytes", d.read_bytes},
-        {"write_bytes", d.write_bytes},
-        {"read_ios", d.read_ios},
-        {"write_ios", d.write_ios},
-        {"read_sectors", d.read_sectors},
-        {"write_sectors", d.write_sectors},
-        {"model", d.model},
-        {"kind", d.kind}
-    };
+    j = nlohmann::json{{"name", d.name},
+                       {"size_bytes", d.size_bytes},
+                       {"read_bytes", d.read_bytes},
+                       {"write_bytes", d.write_bytes},
+                       {"read_ios", d.read_ios},
+                       {"write_ios", d.write_ios},
+                       {"read_sectors", d.read_sectors},
+                       {"write_sectors", d.write_sectors},
+                       {"model", d.model},
+                       {"kind", d.kind}};
 }
 
 inline void to_json(nlohmann::json& j, const DiskInfo::Mount& m) {
-    j = nlohmann::json{
-        {"mountpoint", m.mountpoint},
-        {"device", m.device},
-        {"fstype", m.fstype},
-        {"total_bytes", m.total_bytes},
-        {"used_bytes", m.used_bytes},
-        {"read_bytes", m.read_bytes},
-        {"write_bytes", m.write_bytes}
-    };
+    j = nlohmann::json{{"mountpoint", m.mountpoint}, {"device", m.device},         {"fstype", m.fstype},          {"total_bytes", m.total_bytes},
+                       {"used_bytes", m.used_bytes}, {"read_bytes", m.read_bytes}, {"write_bytes", m.write_bytes}};
 }
 
-inline void to_json(nlohmann::json& j, const DiskInfo& d) {
-    j = nlohmann::json{
-        {"disks", d.disks},
-        {"mounts", d.mounts}
-    };
-}
+inline void to_json(nlohmann::json& j, const DiskInfo& d) { j = nlohmann::json{{"disks", d.disks}, {"mounts", d.mounts}}; }
 
 inline void to_json(nlohmann::json& j, const BatteryInfo& b) {
-    j = nlohmann::json{
-        {"capacity", b.capacity},
-        {"full_design", b.full_design},
-        {"full_now", b.full_now},
-        {"status", b.status}
-    };
+    j = nlohmann::json{{"capacity", b.capacity}, {"full_design", b.full_design}, {"full_now", b.full_now}, {"status", b.status}};
 }
 
 inline void to_json(nlohmann::json& j, const NetworkInfo& n) {
-    j = nlohmann::json{
-        {"name", n.name},
-        {"type", n.type},
-        {"kind", n.kind},
-        {"mac", n.mac},
-        {"speed_mbps", n.speed_mbps},
-        {"rx_bytes", n.rx_bytes},
-        {"tx_bytes", n.tx_bytes},
-        {"rate_rx_mbps", n.rate_rx_mbps},
-        {"rate_tx_mbps", n.rate_tx_mbps}
-    };
+    j = nlohmann::json{{"name", n.name},
+                       {"type", n.type},
+                       {"kind", n.kind},
+                       {"mac", n.mac},
+                       {"speed_mbps", n.speed_mbps},
+                       {"rx_bytes", n.rx_bytes},
+                       {"tx_bytes", n.tx_bytes},
+                       {"rate_rx_mbps", n.rate_rx_mbps},
+                       {"rate_tx_mbps", n.rate_tx_mbps}};
 }
 
 inline void to_json(nlohmann::json& j, const HardwareInfo& h) {
-    j = nlohmann::json{
-        {"board_vendor", h.board_vendor},
-        {"board_name", h.board_name},
-        {"bios_vendor", h.bios_vendor},
-        {"bios_version", h.bios_version},
-        {"bios_date", h.bios_date},
-        {"product_name", h.product_name},
-        {"serial_number", h.serial_number},
-        {"battery", h.battery},
-        {"gpu", h.gpu},
-        {"network", h.network},
-        {"pci_device_count", h.pci_device_count}
-    };
+    j = nlohmann::json{{"board_vendor", h.board_vendor},
+                       {"board_name", h.board_name},
+                       {"bios_vendor", h.bios_vendor},
+                       {"bios_version", h.bios_version},
+                       {"bios_date", h.bios_date},
+                       {"product_name", h.product_name},
+                       {"serial_number", h.serial_number},
+                       {"battery", h.battery},
+                       {"gpu", h.gpu},
+                       {"network", h.network},
+                       {"pci_device_count", h.pci_device_count}};
 }
 
 inline void to_json(nlohmann::json& j, const SystemStatus& s) {
-    j = nlohmann::json{
-        {"cpu", s.cpu},
-        {"load", s.load},
-        {"temp", s.temp},
-        {"fans", s.fans},
-        {"mem", s.mem},
-        {"disk", s.disk},
-        {"hw", s.hw},
-        {"timestamp", std::chrono::system_clock::to_time_t(s.timestamp)}
-    };
+    j = nlohmann::json{{"cpu", s.cpu}, {"load", s.load}, {"temp", s.temp}, {"fans", s.fans},
+                       {"mem", s.mem}, {"disk", s.disk}, {"hw", s.hw},     {"timestamp", std::chrono::system_clock::to_time_t(s.timestamp)}};
 }
 
 } // namespace hostpulse::collector

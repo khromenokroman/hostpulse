@@ -1,14 +1,16 @@
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "collector.h"
-#include <nlohmann/json.hpp>
+#include <gtest/gtest.h>
+
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
-#include <vector>
 #include <thread>
-#include <chrono>
+#include <vector>
+
+#include "collector.h"
 
 namespace hostpulse::collector::test {
 

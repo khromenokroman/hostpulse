@@ -1,12 +1,15 @@
 #include "server.h"
-#include "collector.h"
-#include "web_ui.h"
+
 #include <httplib.h>
-#include <thread>
+
 #include <atomic>
 #include <chrono>
-#include <mutex>
 #include <iostream>
+#include <mutex>
+#include <thread>
+
+#include "collector.h"
+#include "web_ui.h"
 
 namespace hostpulse::server {
 
@@ -66,9 +69,8 @@ bool start_server(int port, const std::vector<Route>& extra_routes) {
     std::thread sampler_thread(sampler_loop, std::move(sampler));
 
     static const std::pair<const char*, const char*> kApi[] = {
-        {"/api/cpu", "cpu"},   {"/api/load", "load"}, {"/api/temp", "temp"},
-        {"/api/fans", "fans"}, {"/api/mem", "mem"},   {"/api/disk", "disk"},
-        {"/api/hw", "hw"},     {"/api/all", ""},      {"/api/health", ""},
+        {"/api/cpu", "cpu"},   {"/api/load", "load"}, {"/api/temp", "temp"}, {"/api/fans", "fans"}, {"/api/mem", "mem"},
+        {"/api/disk", "disk"}, {"/api/hw", "hw"},     {"/api/all", ""},      {"/api/health", ""},
     };
     for (const auto& [path, key] : kApi) {
         g_server->Get(path, [key = std::string(key)](const httplib::Request&, httplib::Response& res) {
@@ -76,9 +78,7 @@ bool start_server(int port, const std::vector<Route>& extra_routes) {
         });
     }
 
-    g_server->Get("/", [](const httplib::Request&, httplib::Response& res) {
-        res.set_content(std::string(kIndexHtml), "text/html; charset=utf-8");
-    });
+    g_server->Get("/", [](const httplib::Request&, httplib::Response& res) { res.set_content(std::string(kIndexHtml), "text/html; charset=utf-8"); });
 
     for (auto& r : extra_routes) {
         g_server->Get(r.path, [h = r.handler, html = r.is_html](const httplib::Request&, httplib::Response& res) {

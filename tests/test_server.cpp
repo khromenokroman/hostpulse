@@ -1,10 +1,12 @@
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "server.h"
+#include <gtest/gtest.h>
 #include <httplib.h>
-#include <nlohmann/json.hpp>
+
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <thread>
+
+#include "server.h"
 
 namespace hostpulse::server::test {
 
@@ -18,13 +20,15 @@ using ::testing::Not;
  * пока сервер начнёт отвечать, в деструкторе останавливаем и дожидаемся потока.
  */
 class ServerTest : public ::testing::Test {
-protected:
+   protected:
     static constexpr int kPort = 18080;
 
     void SetUp() override {
-        thread_ = std::thread([this] { listen_ok_ = start_server(kPort, {
-            {"/extra", [] { return std::string(R"({"extra":true})"); }},
-        }); });
+        thread_ = std::thread([this] {
+            listen_ok_ = start_server(kPort, {
+                                                 {"/extra", [] { return std::string(R"({"extra":true})"); }},
+                                             });
+        });
 
         client_.set_connection_timeout(std::chrono::seconds(1));
         for (int i = 0; i < 100; ++i) {
@@ -64,7 +68,7 @@ protected:
 
     httplib::Client client_{"127.0.0.1", kPort};
 
-private:
+   private:
     std::thread thread_;
     bool listen_ok_ = false;
 };

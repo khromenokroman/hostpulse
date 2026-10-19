@@ -1,16 +1,17 @@
 #include "collector.h"
 
-#include <fstream>
-#include <sstream>
-#include <filesystem>
+#include <sys/statvfs.h>
+
+#include <algorithm>
 #include <array>
 #include <chrono>
-#include <thread>
-#include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <nlohmann/json.hpp>
-#include <cstdio>
-#include <sys/statvfs.h>
+#include <sstream>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -47,9 +48,7 @@ static int read_int(const fs::path& p) {
     }
 }
 
-static float celsius_from_millideg(int32_t millideg) {
-    return millideg / 1000.0f;
-}
+static float celsius_from_millideg(int32_t millideg) { return millideg / 1000.0f; }
 
 /**
  * @brief Номера N всех файлов <prefix>N_input в каталоге hwmon, по возрастанию
@@ -194,16 +193,15 @@ TempData read_temperatures() {
                 try {
                     float c = std::stoi(temp_str) / 1000.0f;
                     data.sensors.emplace_back("SSD", c);
-                } catch (...) {}
+                } catch (...) {
+                }
             }
         }
     }
 
-    std::sort(data.cores.begin(), data.cores.end(), [](const auto& a, const auto& b) {
-        return a.id.size() != b.id.size() ? a.id.size() < b.id.size() : a.id < b.id;
-    });
-    std::sort(data.sensors.begin(), data.sensors.end(),
-              [](const auto& a, const auto& b) { return a.id < b.id; });
+    std::sort(data.cores.begin(), data.cores.end(),
+              [](const auto& a, const auto& b) { return a.id.size() != b.id.size() ? a.id.size() < b.id.size() : a.id < b.id; });
+    std::sort(data.sensors.begin(), data.sensors.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     // номера ядер Intel идут с пропусками (0, 4, 8, ... у гибридных) — нумеруем по порядку с 1
     for (size_t k = 0; k < data.cores.size(); ++k) {
         if (data.cores[k].id.rfind("Ядро ", 0) == 0) data.cores[k].id = "Ядро " + std::to_string(k + 1);
@@ -432,14 +430,22 @@ MemInfo read_memory() {
             uint64_t kb = std::stoull(val_str);
             uint64_t bytes = kb * 1024;
 
-            if (key == "MemTotal") info.total = bytes;
-            else if (key == "MemFree") info.free = bytes;
-            else if (key == "MemAvailable") info.available = bytes;
-            else if (key == "Buffers") info.buffers = bytes;
-            else if (key == "Cached") info.cached = bytes;
-            else if (key == "SwapTotal") info.swap_total = bytes;
-            else if (key == "SwapFree") info.swap_free = bytes;
-        } catch (...) {}
+            if (key == "MemTotal")
+                info.total = bytes;
+            else if (key == "MemFree")
+                info.free = bytes;
+            else if (key == "MemAvailable")
+                info.available = bytes;
+            else if (key == "Buffers")
+                info.buffers = bytes;
+            else if (key == "Cached")
+                info.cached = bytes;
+            else if (key == "SwapTotal")
+                info.swap_total = bytes;
+            else if (key == "SwapFree")
+                info.swap_free = bytes;
+        } catch (...) {
+        }
     }
 
     info.used = info.total - info.free - info.buffers - info.cached;
@@ -477,8 +483,7 @@ DiskInfo read_disk_info() {
             iss >> major >> minor >> name;
             if (name.empty()) continue;
 
-            iss >> reads >> merged_reads >> sectors_read >> read_time
-                >> writes >> merged_writes >> sectors_written >> write_time;
+            iss >> reads >> merged_reads >> sectors_read >> read_time >> writes >> merged_writes >> sectors_written >> write_time;
 
             if (reads == 0 && writes == 0) continue;
 
@@ -501,8 +506,7 @@ DiskInfo read_disk_info() {
             std::string device, mountpoint, fstype;
             iss >> device >> mountpoint >> fstype;
 
-            if (fstype != "ext4" && fstype != "xfs" && fstype != "btrfs" &&
-                fstype != "f2fs" && fstype != "ntfs" && fstype != "vfat" &&
+            if (fstype != "ext4" && fstype != "xfs" && fstype != "btrfs" && fstype != "f2fs" && fstype != "ntfs" && fstype != "vfat" &&
                 fstype != "exfat" && fstype != "zfs") {
                 continue;
             }
@@ -541,7 +545,8 @@ DiskInfo read_disk_info() {
                     uint64_t sectors = std::stoull(size_str);
                     info.disks[disk_name].size_bytes = sectors * 512;
                     info.disks[disk_name].name = disk_name;
-                } catch (...) {}
+                } catch (...) {
+                }
             }
 
             // физический диск: есть ссылка device на контроллер (у loop, dm, zram её нет)
@@ -606,8 +611,7 @@ HardwareInfo read_hardware_info() {
     std::istringstream gpu_stream(run_lspci);
     std::string line;
     while (std::getline(gpu_stream, line)) {
-        if (line.find("VGA") != std::string::npos || line.find("3D") != std::string::npos ||
-            line.find("Display") != std::string::npos) {
+        if (line.find("VGA") != std::string::npos || line.find("3D") != std::string::npos || line.find("Display") != std::string::npos) {
             info.gpu.push_back(trim(line.substr(line.find(":") + 1)));
         }
     }
@@ -633,7 +637,8 @@ HardwareInfo read_hardware_info() {
             try {
                 n.rx_bytes = std::stoull(read_word(iface.path() / "statistics/rx_bytes"));
                 n.tx_bytes = std::stoull(read_word(iface.path() / "statistics/tx_bytes"));
-            } catch (...) {}
+            } catch (...) {
+            }
         }
     }
 
@@ -679,8 +684,7 @@ static void apply_load_delta(CpuLoad& cur, const CpuLoad& prev) {
     }
 
     for (auto& core : cur.per_core) {
-        auto it = std::find_if(prev.per_core.begin(), prev.per_core.end(),
-                               [&](const auto& p) { return p.id == core.id; });
+        auto it = std::find_if(prev.per_core.begin(), prev.per_core.end(), [&](const auto& p) { return p.id == core.id; });
         if (it == prev.per_core.end() || core.total <= it->total) continue;
         core.percent = delta_percent(core.active, it->active, core.total - it->total);
     }
