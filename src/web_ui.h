@@ -42,6 +42,7 @@ tr:hover { background: #1c2128; }
 .cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
 .core { background: #0d1117; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; }
 .core small { display: block; color: #8b949e; font-size: 0.85em; }
+td small { color: #8b949e; }
 .temp-critical { color: #f85149; font-weight: bold; }
 .temp-warn { color: #d29922; }
 .temp-ok { color: #3fb950; }
@@ -86,17 +87,14 @@ function card(id, title, rows) {
   return rows ? '<div class="card" id="' + id + '"><h2>' + title + '</h2><table>' + rows + '</table></div>' : '';
 }
 
-function cpuCard(cpu) {
-  const mhz = (cpu.current_mhz && cpu.current_mhz.length) ? cpu.current_mhz[0] : NaN;
-  return card('cpu', 'Процессор',
-    row('Модель', esc(cpu.model)) +
-    row('Ядра (лог / физ)', cpu.logical_cores + ' / ' + cpu.physical_cores) +
-    row('Частота', num(mhz, 1) + ' / ' + num(cpu.min_mhz, 0) + '-' + num(cpu.max_mhz, 0) + ' МГц') +
-    row('Режим', esc(cpu.governor)));
-}
-
-function loadCard(load) {
-  let h = row('Общая', '<span class="val ' + tc(load.active_percent) + '">' + num(load.active_percent, 1) + '%</span>') +
+function loadCard(load, cpu) {
+  let h = '';
+  if (cpu) {
+    const mhz = (cpu.current_mhz && cpu.current_mhz.length) ? cpu.current_mhz[0] : NaN;
+    h += row('Частота', num(mhz, 0) + ' МГц <small>(' + num(cpu.min_mhz, 0) + '–' + num(cpu.max_mhz, 0) + ')</small>') +
+      row('Режим', esc(cpu.governor));
+  }
+  h += row('Общая', '<span class="val ' + tc(load.active_percent) + '">' + num(load.active_percent, 1) + '%</span>') +
     row('Пользователь', '<div class="val">' + num(load.user_percent, 1) + '%</div>' + bar(load.user_percent)) +
     row('Система', '<div class="val">' + num(load.system_percent, 1) + '%</div>' + bar(load.system_percent)) +
     row('IO ожидание', '<div class="val">' + num(load.iowait_percent, 1) + '%</div>' + bar(load.iowait_percent)) +
@@ -155,10 +153,14 @@ function fanCard(fans) {
   return card('fans', 'Вентиляторы', h);
 }
 
-function hwCard(hw) {
-  let h = row('Материнская плата', esc(hw.board_vendor) + ' ' + esc(hw.board_name)) +
-    row('BIOS', esc(hw.bios_vendor) + ' v' + esc(hw.bios_version) + ' (' + esc(hw.bios_date) + ')');
+function hwCard(hw, cpu, disk) {
+  let h = '';
   if (hw.product_name) h += row('Продукт', esc(hw.product_name));
+  h += row('Материнская плата', esc(hw.board_vendor) + ' ' + esc(hw.board_name)) +
+    row('BIOS', esc(hw.bios_vendor) + ' v' + esc(hw.bios_version) + ' (' + esc(hw.bios_date) + ')');
+  if (cpu) h += row('Процессор', esc(cpu.model) + '<br><small>' + cpu.physical_cores + ' ядер / ' + cpu.logical_cores + ' потоков</small>');
+  for (const d of Object.values((disk && disk.disks) || {}).filter(d => d.kind))
+    h += row('Диск ' + esc(d.name), esc(d.model || '—') + '<br><small>' + esc(d.kind) + ', ' + fb(d.size_bytes) + '</small>');
   if (hw.battery && hw.battery.status)
     h += row('Батарея', '<span class="val">' + hw.battery.capacity + '%</span> (' + esc(hw.battery.status) + ')');
   for (const g of hw.gpu || []) h += row('Видеокарта', esc(g));
@@ -194,13 +196,12 @@ async function refresh() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     document.getElementById('content').innerHTML =
-      safe(cpuCard, d.cpu, 'Процессор') +
-      safe(loadCard, d.load, 'Нагрузка') +
+      safe(d => loadCard(d.load, d.cpu), d.load && d, 'Нагрузка') +
       safe(tempCard, d.temp, 'Температура') +
       safe(memCard, d.mem, 'Память') +
       safe(diskCard, d.disk, 'Диски') +
       safe(fanCard, d.fans, 'Вентиляторы') +
-      safe(hwCard, d.hw, 'Оборудование') +
+      safe(d => hwCard(d.hw, d.cpu, d.disk), d.hw && d, 'Оборудование') +
       safe(netCard, d.hw, 'Сеть');
     status.textContent = 'Обновлено: ' + new Date().toLocaleString('ru-RU');
     status.classList.remove('error');

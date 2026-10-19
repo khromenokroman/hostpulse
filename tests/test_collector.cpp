@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include "collector.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -137,6 +138,30 @@ TEST(CollectorTest, AllCoreTemperaturesFound) {
 
     auto temp = read_temperatures();
     EXPECT_EQ(temp.cores.size(), expected) << "ядер в coretemp: " << expected << ", прочитано: " << temp.cores.size();
+}
+
+/**
+ * Физические диски (есть /sys/block/X/device) получают тип NVMe/SSD/HDD и модель без
+ * хвостовых пробелов; у виртуальных (loop, dm, zram) и разделов тип пустой.
+ */
+TEST(CollectorTest, PhysicalDisksHaveKind) {
+    namespace fs = std::filesystem;
+    auto disk = read_disk_info();
+    size_t physical = 0;
+    for (const auto& [name, d] : disk.disks) {
+        SCOPED_TRACE(name);
+        bool has_device = fs::exists(fs::path("/sys/block") / name / "device");
+        if (has_device) {
+            ++physical;
+            EXPECT_THAT(d.kind, ::testing::AnyOf("NVMe", "SSD", "HDD"));
+            if (!d.model.empty()) {
+                EXPECT_NE(d.model.back(), ' ') << "модель '" << d.model << "' с хвостовыми пробелами";
+            }
+        } else {
+            EXPECT_TRUE(d.kind.empty()) << "у виртуального устройства/раздела тип '" << d.kind << "'";
+        }
+    }
+    if (physical == 0) GTEST_SKIP() << "нет физических дисков (контейнер?)";
 }
 
 /**

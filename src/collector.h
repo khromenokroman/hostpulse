@@ -102,6 +102,8 @@ struct DiskInfo {
         uint64_t write_ios = 0;
         uint64_t read_sectors = 0;
         uint64_t write_sectors = 0;
+        std::string model;  ///< модель из /sys/block/X/device/model
+        std::string kind;   ///< NVMe / SSD / HDD; пусто у виртуальных (loop, dm, zram) и разделов
     };
 
     struct Mount {
@@ -309,7 +311,9 @@ inline void to_json(nlohmann::json& j, const DiskInfo::Disk& d) {
         {"read_ios", d.read_ios},
         {"write_ios", d.write_ios},
         {"read_sectors", d.read_sectors},
-        {"write_sectors", d.write_sectors}
+        {"write_sectors", d.write_sectors},
+        {"model", d.model},
+        {"kind", d.kind}
     };
 }
 

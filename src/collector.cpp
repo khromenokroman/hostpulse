@@ -504,6 +504,18 @@ DiskInfo read_disk_info() {
                     info.disks[disk_name].name = disk_name;
                 } catch (...) {}
             }
+
+            // физический диск: есть ссылка device на контроллер (у loop, dm, zram её нет)
+            if (fs::exists(disk.path() / "device")) {
+                auto& d = info.disks[disk_name];
+                d.name = disk_name;
+                d.model = trim(read_line(disk.path() / "device/model"));
+                if (disk_name.rfind("nvme", 0) == 0) {
+                    d.kind = "NVMe";
+                } else {
+                    d.kind = read_word(disk.path() / "queue/rotational") == "1" ? "HDD" : "SSD";
+                }
+            }
         }
     }
 
