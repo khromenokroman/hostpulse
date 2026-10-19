@@ -84,11 +84,11 @@ static std::string trim(const std::string& s) {
  * @brief Понятное имя датчика по драйверу hwmon и его метке
  *
  * Метки драйверов ("Composite", "Sensor 1", "edge") простому человеку ничего не говорят,
- * поэтому называем по устройству. Пустая строка — датчик не показываем.
+ * поэтому называем по устройству. Пустая строка: датчик не показываем.
  */
 static std::string sensor_name(const std::string& hwmon, const std::string& label, int index) {
     if (hwmon == "nvme") {
-        // "Composite" — общая температура накопителя, "Sensor N" — отдельные точки на плате
+        // "Composite": общая температура накопителя, "Sensor N": отдельные точки на плате
         if (label.empty() || label == "Composite") return "SSD";
         if (label.rfind("Sensor ", 0) == 0) return "SSD, датчик " + label.substr(7);
         return "SSD, " + label;
@@ -110,7 +110,7 @@ static std::string sensor_name(const std::string& hwmon, const std::string& labe
     return label.empty() ? hwmon : label;
 }
 
-/** @brief Одинаковым именам добавляет номер: "SSD", "SSD (2)" — например, при двух накопителях */
+/** @brief Одинаковым именам добавляет номер: "SSD", "SSD (2)": например, при двух накопителях */
 static void make_unique_names(std::vector<TempSensor>& sensors) {
     std::map<std::string, int> count;
     for (auto& s : sensors) {
@@ -143,7 +143,7 @@ TempData read_temperatures() {
                 std::string label;
 
                 if (hwmon_name == "coretemp") {
-                    // Intel: "Package id 0" — весь процессор, "Core N" — ядро
+                    // Intel: "Package id 0": весь процессор, "Core N": ядро
                     if (temp_label.rfind("Package", 0) == 0) {
                         label = "Процессор в целом";
                         data.package.emplace_back(label, c);
@@ -152,7 +152,7 @@ TempData read_temperatures() {
                         data.cores.emplace_back(label, c);
                     }
                 } else if (hwmon_name == "k10temp") {
-                    // AMD: "Tctl" — весь процессор, "TccdN" — блок ядер (CCD), "Tdie" дублирует Tctl
+                    // AMD: "Tctl": весь процессор, "TccdN": блок ядер (CCD), "Tdie" дублирует Tctl
                     if (temp_label.rfind("Tccd", 0) == 0) {
                         label = "Блок ядер " + temp_label.substr(4);
                         data.cores.emplace_back(label, c);
@@ -202,7 +202,7 @@ TempData read_temperatures() {
     std::sort(data.cores.begin(), data.cores.end(),
               [](const auto& a, const auto& b) { return a.id.size() != b.id.size() ? a.id.size() < b.id.size() : a.id < b.id; });
     std::sort(data.sensors.begin(), data.sensors.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
-    // номера ядер Intel идут с пропусками (0, 4, 8, ... у гибридных) — нумеруем по порядку с 1
+    // номера ядер Intel идут с пропусками (0, 4, 8, ... у гибридных): нумеруем по порядку с 1
     for (size_t k = 0; k < data.cores.size(); ++k) {
         if (data.cores[k].id.rfind("Ядро ", 0) == 0) data.cores[k].id = "Ядро " + std::to_string(k + 1);
     }

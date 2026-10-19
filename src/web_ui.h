@@ -81,7 +81,7 @@ function fb(b) {
   return (b / 1073741824).toFixed(1) + ' GB';
 }
 function deg(t) { return '<span class="' + tc(t) + '">' + num(t, 1) + '&#8451;</span>'; }
-// hint — пояснение во всплывающей подсказке к подписи
+// hint: пояснение во всплывающей подсказке к подписи
 function row(k, v, hint) {
   const td = hint ? '<td class="hint" title="' + esc(hint) + '">' : '<td>';
   return '<tr>' + td + k + '</td><td>' + v + '</td></tr>';
@@ -108,7 +108,7 @@ function loadCard(load, cpu) {
   if (cpu) {
     const mhz = (cpu.current_mhz && cpu.current_mhz.length) ? cpu.current_mhz[0] : NaN;
     h += row('Частота', num(mhz, 0) + ' МГц <small>(' + num(cpu.min_mhz, 0) + '–' + num(cpu.max_mhz, 0) + ')</small>',
-        'Текущая частота процессора; в скобках — минимальная и максимальная') +
+        'Текущая частота процессора; в скобках: минимальная и максимальная') +
       row('Режим питания', esc(GOVERNORS[cpu.governor] || cpu.governor) + (GOVERNORS[cpu.governor] ? ' <small>(' + esc(cpu.governor) + ')</small>' : ''),
         'Как система управляет частотой: экономит энергию или держит высокую скорость');
   }
@@ -120,17 +120,17 @@ function loadCard(load, cpu) {
     row('Система', '<div class="val">' + num(load.system_percent, 1) + '%</div>' + bar(load.system_percent),
       'Работа самой операционной системы: драйверы, файлы, сеть') +
     row('Ожидание диска', '<div class="val">' + num(load.iowait_percent, 1) + '%</div>' + bar(load.iowait_percent),
-      'Процессор простаивает, пока диск читает или пишет данные. Высокое значение — диск не успевает') +
+      'Процессор простаивает, пока диск читает или пишет данные. Высокое значение: диск не успевает') +
     row('Очередь задач', '<span class="val ' + tc(queuePct) + '">' + num(load.load1, 2) + ' / ' + num(load.load5, 2) + ' / ' + num(load.load15, 2) + '</span>' +
       '<br><small>за 1 / 5 / 15 минут</small>',
       'Сколько задач в среднем одновременно работали или ждали процессор (load average). ' +
-      'Если число больше количества потоков (' + threads + ') — компьютер не справляется');
+      'Если число больше количества потоков (' + threads + '): компьютер не справляется');
   h += cores((load.per_core || []).map(c => ['Поток ' + (c.id + 1), '<span class="' + tc(c.percent) + '">' + num(c.percent, 1) + '%</span>']));
   return card('load', 'Нагрузка', h);
 }
 
 function sensorHint(id) {
-  if (id.startsWith('Процессор в целом')) return 'Температура всего процессора — по самому горячему месту';
+  if (id.startsWith('Процессор в целом')) return 'Температура всего процессора: по самому горячему месту';
   if (id.startsWith('SSD, датчик')) return 'Отдельная точка на плате SSD: контроллер или чипы памяти';
   if (id.startsWith('SSD')) return 'Общая температура SSD-накопителя';
   if (id.startsWith('Материнская плата')) return 'Датчик материнской платы (зона ACPI)';
@@ -208,7 +208,7 @@ function hwCard(hw, cpu, disk) {
   return card('hw', 'Оборудование', h);
 }
 
-// физические адаптеры; если их нет (контейнер) — все интерфейсы
+// физические адаптеры; если их нет (контейнер): все интерфейсы
 function adapters(hw) {
   const all = Object.values(hw.network || {});
   const phys = all.filter(n => n.kind);

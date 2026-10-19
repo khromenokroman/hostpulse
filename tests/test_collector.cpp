@@ -218,7 +218,7 @@ TEST(SamplerTest, LoadPercentIsDeltaInRange) {
 
 /**
  * Sampler: скорость сети считается по реальному интервалу между замерами;
- * на первом замере предыдущих счётчиков нет — скорость 0.
+ * на первом замере предыдущих счётчиков нет: скорость 0.
  */
 TEST(SamplerTest, NetworkRateNonNegative) {
     Sampler sampler;

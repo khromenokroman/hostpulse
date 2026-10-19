@@ -115,7 +115,7 @@ TEST_F(ServerTest, SectionEndpoints) {
     }
 }
 
-/** Загрузка по ядрам — проценты за интервал между замерами, в пределах 0..100. */
+/** Загрузка по ядрам: проценты за интервал между замерами, в пределах 0..100. */
 TEST_F(ServerTest, LoadPerCorePercent) {
     // ждём второй замер фонового потока, чтобы проценты были уже за интервал
     std::this_thread::sleep_for(std::chrono::milliseconds(1200));
@@ -168,11 +168,11 @@ TEST_F(ServerTest, BusyPortFails) {
     int rc = bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     int err = errno;
     close(fd);
-    EXPECT_EQ(rc, -1) << "порт " << kPort << " удалось занять повторно — сервер слушает с SO_REUSEPORT?";
+    EXPECT_EQ(rc, -1) << "порт " << kPort << " удалось занять повторно: сервер слушает с SO_REUSEPORT?";
     EXPECT_EQ(err, EADDRINUSE);
 }
 
-/** Неизвестный путь — 404, а не дашборд или пустой JSON. */
+/** Неизвестный путь: 404, а не дашборд или пустой JSON. */
 TEST_F(ServerTest, UnknownPathIs404) {
     auto res = client_.Get("/api/nope");
     ASSERT_TRUE(res) << "нет ответа";
