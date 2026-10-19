@@ -1,8 +1,6 @@
 #include <csignal>
-#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <thread>
 
 #include "collector.h"
 #include "server.h"
@@ -12,18 +10,18 @@ static void signal_handler(int sig) {
     hostpulse::server::stop_server();
 }
 
-static void print_usage(const char* prog) {
-    std::cout << "hostpulse — состояние компьютера в браузере: нагрузка, температуры, память, диски, сеть\n"
+static void print_usage() {
+    std::cout << "hostpulse " HOSTPULSE_VERSION
+                 "\nСостояние компьютера в браузере: нагрузка, температуры, память, диски, сеть.\n"
                  "\n"
-                 "Использование:\n"
-                 "  "
-              << prog
-              << " [ПОРТ]    запустить веб-дашборд (порт по умолчанию 8080)\n"
-                 "  "
-              << prog
-              << " --dump    вывести все данные в JSON и выйти\n"
-                 "  "
-              << prog << " --help    показать эту справку\n";
+                 "Использование: hostpulse [ПАРАМЕТРЫ] [ПОРТ]\n"
+                 "\n"
+                 "  --port ПОРТ    порт веб-дашборда (по умолчанию 8080)\n"
+                 "  --host АДРЕС   откуда принимать подключения: 0.0.0.0 из сети (по умолчанию),\n"
+                 "                 127.0.0.1 только с этой машины\n"
+                 "  --dump         вывести все данные в JSON и выйти\n"
+                 "  --version      показать версию\n"
+                 "  --help         показать эту справку\n";
 }
 
 /** @brief Номер порта 1..65535 из строки; 0, если строка не порт */
@@ -33,39 +31,54 @@ static int parse_port(const std::string& s) {
     return port <= 65535 ? port : 0;
 }
 
+/** @brief Сообщение о неверных аргументах в stderr; код выхода 2 */
+static int usage_error(const std::string& message) {
+    std::cerr << "Ошибка: " << message << "\nСправка: hostpulse --help" << std::endl;
+    return 2;
+}
+
 int main(int argc, char* argv[]) {
     int port = 8080;
+    std::string host = "0.0.0.0";
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
-            print_usage("hostpulse");
+            print_usage();
+            return 0;
+        }
+        if (arg == "--version") {
+            std::cout << "hostpulse " HOSTPULSE_VERSION << std::endl;
             return 0;
         }
         if (arg == "--dump") {
-            auto status = hostpulse::collector::read_all();
-            nlohmann::json j;
-            nlohmann::to_json(j, status);
+            nlohmann::json j = hostpulse::collector::read_all();
             std::cout << j.dump(2) << std::endl;
             return 0;
         }
-        port = parse_port(arg);
-        if (!port) {
-            std::cerr << "Ошибка: неверный аргумент «" << arg << "». Ожидается номер порта от 1 до 65535.\n"
-                      << "Справка: hostpulse --help" << std::endl;
-            return 2;
+        if (arg == "--host" || arg == "--port") {
+            if (i + 1 >= argc) return usage_error("после " + arg + " нужно значение");
+            std::string value = argv[++i];
+            if (arg == "--host") {
+                host = value;
+                continue;
+            }
+            arg = value;
         }
+        port = parse_port(arg);
+        if (!port) return usage_error("неверный порт «" + arg + "», ожидается число от 1 до 65535");
     }
 
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    std::cout << "hostpulse: запуск сервера на порту " << port << "\n"
-              << "Откройте в браузере: http://localhost:" << port << " (с других компьютеров сети — по IP этой машины)\n"
-              << "Остановить: Ctrl+C" << std::endl;
+    std::cout << "hostpulse " HOSTPULSE_VERSION ": запуск сервера на " << host << ":" << port << "\n"
+              << "Откройте в браузере: http://localhost:" << port;
+    if (host == "0.0.0.0") std::cout << " (с других компьютеров сети: по IP этой машины)";
+    std::cout << std::endl;
 
-    if (!hostpulse::server::start_server(port)) {
-        std::cerr << "Ошибка: не удалось запустить сервер на порту " << port
-                  << " — порт занят другой программой или нет прав (порты ниже 1024 требуют root)." << std::endl;
+    if (!hostpulse::server::start_server(port, {}, host)) {
+        std::cerr << "Ошибка: не удалось запустить сервер на " << host << ":" << port
+                  << ": порт занят другой программой, неверный адрес или нет прав (порты ниже 1024 требуют root)." << std::endl;
         return 1;
     }
 

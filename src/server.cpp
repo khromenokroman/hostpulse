@@ -53,7 +53,7 @@ static std::string snapshot_part(const std::string& key) {
     return it == g_snapshot.end() ? "null" : it->dump(2);
 }
 
-bool start_server(int port, const std::vector<Route>& extra_routes) {
+bool start_server(int port, const std::vector<Route>& extra_routes, const std::string& host) {
     g_server = std::make_unique<httplib::Server>();
     // httplib по умолчанию ставит SO_REUSEPORT: тогда второй экземпляр молча слушает
     // тот же порт и делит с первым запросы. Оставляем только SO_REUSEADDR.
@@ -86,7 +86,7 @@ bool start_server(int port, const std::vector<Route>& extra_routes) {
         });
     }
 
-    bool ok = g_running && g_server->listen("0.0.0.0", port);
+    bool ok = g_running && g_server->listen(host, port);
 
     g_running = false;
     sampler_thread.join();
