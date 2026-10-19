@@ -12,6 +12,9 @@
 
 namespace hostpulse::collector::test {
 
+using ::testing::HasSubstr;
+using ::testing::Not;
+
 TEST(CollectorTest, ReadTemperatures) {
     auto temp = read_temperatures();
     // Должна найтись хотя бы одна температура (в виртуалках hwmon бывает пуст)
@@ -111,17 +114,23 @@ static std::vector<std::string> sysfs_temp_labels(const std::string& only_hwmon 
     return labels;
 }
 
-/** Имена датчиков читаются целой строкой: раньше "Sensor 1" обрезалось до "Sensor". */
-TEST(CollectorTest, SensorLabelsNotTruncated) {
-    auto labels = sysfs_temp_labels();
-    if (labels.empty()) GTEST_SKIP() << "в hwmon нет tempN_label";
-
+/**
+ * Имена датчиков понятны без знания драйверов: нет сырых меток ("Composite", "Sensor 1",
+ * "Core 8", "Package id 0", "iwlwifi_1"), и все имена разные (одинаковые нумеруются).
+ */
+TEST(CollectorTest, SensorNamesReadableAndUnique) {
     auto temp = read_temperatures();
-    std::set<std::string> ids;
-    for (const auto& s : temp.sensors) ids.insert(s.id);
-    for (const auto& s : temp.cores) ids.insert(s.id);
-    for (const auto& label : labels) {
-        EXPECT_TRUE(ids.contains(label)) << "метка '" << label << "' из sysfs не найдена в прочитанных датчиках";
+    std::map<std::string, int> seen;
+    for (const auto* group : {&temp.package, &temp.cores, &temp.sensors}) {
+        for (const auto& s : *group) {
+            ++seen[s.id];
+            for (const char* raw : {"Composite", "Sensor ", "Core ", "Package", "iwlwifi", "Tctl", "Tccd"}) {
+                EXPECT_THAT(s.id, Not(HasSubstr(raw))) << "сырая метка драйвера в имени датчика";
+            }
+        }
+    }
+    for (const auto& [id, n] : seen) {
+        EXPECT_EQ(n, 1) << "имя '" << id << "' встречается " << n << " раз";
     }
 }
 
@@ -162,6 +171,25 @@ TEST(CollectorTest, PhysicalDisksHaveKind) {
         }
     }
     if (physical == 0) GTEST_SKIP() << "нет физических дисков (контейнер?)";
+}
+
+/**
+ * Сетевые адаптеры: у физических (есть /sys/class/net/X/device) тип Wi-Fi или Ethernet,
+ * у виртуальных (docker, veth, мосты) тип пустой; lo не попадает в список.
+ */
+TEST(CollectorTest, NetworkAdaptersHaveKind) {
+    namespace fs = std::filesystem;
+    auto hw = read_hardware_info();
+    EXPECT_FALSE(hw.network.contains("lo"));
+    for (const auto& [name, n] : hw.network) {
+        SCOPED_TRACE(name);
+        auto dir = fs::path("/sys/class/net") / name;
+        if (!fs::exists(dir / "device")) {
+            EXPECT_TRUE(n.kind.empty()) << "у виртуального интерфейса тип '" << n.kind << "'";
+        } else {
+            EXPECT_EQ(n.kind, fs::exists(dir / "wireless") ? "Wi-Fi" : "Ethernet");
+        }
+    }
 }
 
 /**

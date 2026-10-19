@@ -136,7 +136,7 @@ TEST_F(ServerTest, NetworkHasRateFields) {
     ASSERT_TRUE(hw.contains("network"));
     for (const auto& [name, net] : hw["network"].items()) {
         SCOPED_TRACE(name);
-        for (const char* key : {"name", "mac", "speed_mbps", "rate_rx_mbps", "rate_tx_mbps"}) {
+        for (const char* key : {"name", "kind", "mac", "speed_mbps", "rate_rx_mbps", "rate_tx_mbps"}) {
             EXPECT_TRUE(net.contains(key)) << "нет поля '" << key << "'";
         }
         EXPECT_GE(net.value("speed_mbps", -1), 0);

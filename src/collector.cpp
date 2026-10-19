@@ -81,6 +81,45 @@ static std::string trim(const std::string& s) {
 // Температура
 // ------------------------------------------------------------------
 
+/**
+ * @brief Понятное имя датчика по драйверу hwmon и его метке
+ *
+ * Метки драйверов ("Composite", "Sensor 1", "edge") простому человеку ничего не говорят,
+ * поэтому называем по устройству. Пустая строка — датчик не показываем.
+ */
+static std::string sensor_name(const std::string& hwmon, const std::string& label, int index) {
+    if (hwmon == "nvme") {
+        // "Composite" — общая температура накопителя, "Sensor N" — отдельные точки на плате
+        if (label.empty() || label == "Composite") return "SSD";
+        if (label.rfind("Sensor ", 0) == 0) return "SSD, датчик " + label.substr(7);
+        return "SSD, " + label;
+    }
+    if (hwmon == "drivetemp") return "Диск";
+    if (hwmon == "acpitz") return "Материнская плата";
+    if (hwmon.rfind("iwlwifi", 0) == 0) return "Wi-Fi адаптер";
+    if (hwmon.rfind("pch_", 0) == 0) return "Чипсет";
+    if (hwmon == "amdgpu" || hwmon == "radeon" || hwmon == "nouveau" || hwmon == "i915" || hwmon == "xe") {
+        if (label == "junction") return "Видеокарта, самое горячее место";
+        if (label == "mem") return "Видеопамять";
+        return "Видеокарта";
+    }
+    if (hwmon == "nct6687") {
+        if (index == 1) return label.empty() ? "Чипсет" : label;
+        if (index <= 7) return label.empty() ? ("Датчик " + std::to_string(index)) : label;
+        return {};
+    }
+    return label.empty() ? hwmon : label;
+}
+
+/** @brief Одинаковым именам добавляет номер: "SSD", "SSD (2)" — например, при двух накопителях */
+static void make_unique_names(std::vector<TempSensor>& sensors) {
+    std::map<std::string, int> count;
+    for (auto& s : sensors) {
+        int n = ++count[s.id];
+        if (n > 1) s.id += " (" + std::to_string(n) + ")";
+    }
+}
+
 TempData read_temperatures() {
     TempData data;
     fs::path hwmon_dir("/sys/class/hwmon");
@@ -105,33 +144,28 @@ TempData read_temperatures() {
                 std::string label;
 
                 if (hwmon_name == "coretemp") {
+                    // Intel: "Package id 0" — весь процессор, "Core N" — ядро
                     if (temp_label.rfind("Package", 0) == 0) {
-                        label = "Температура пакета";
+                        label = "Процессор в целом";
                         data.package.emplace_back(label, c);
                     } else {
-                        label = temp_label.empty() ? ("Ядро " + std::to_string(i - 1)) : temp_label;
+                        label = "Ядро " + (temp_label.rfind("Core ", 0) == 0 ? temp_label.substr(5) : std::to_string(i - 1));
                         data.cores.emplace_back(label, c);
                     }
-                } else if (hwmon_name == "nvme") {
-                    label = temp_label.empty() ? "NVMe" : temp_label;
-                    data.sensors.emplace_back(label, c);
-                } else if (hwmon_name == "acpitz") {
-                    label = "Материнская плата";
-                    data.sensors.emplace_back(label, c);
-                } else if (hwmon_name == "nct6687") {
-                    if (i == 1) {
-                        label = temp_label.empty() ? "Чипсет" : temp_label;
-                    } else if (i <= 7) {
-                        label = temp_label.empty() ? ("Датчик " + std::to_string(i)) : temp_label;
+                } else if (hwmon_name == "k10temp") {
+                    // AMD: "Tctl" — весь процессор, "TccdN" — блок ядер (CCD), "Tdie" дублирует Tctl
+                    if (temp_label.rfind("Tccd", 0) == 0) {
+                        label = "Блок ядер " + temp_label.substr(4);
+                        data.cores.emplace_back(label, c);
+                    } else if (temp_label.empty() || temp_label == "Tctl") {
+                        label = "Процессор в целом";
+                        data.package.emplace_back(label, c);
                     } else {
                         continue;
                     }
-                    data.sensors.emplace_back(label, c);
-                } else if (hwmon_name == "drivetemp") {
-                    label = temp_label.empty() ? "SSD/SDD" : temp_label;
-                    data.sensors.emplace_back(label, c);
                 } else {
-                    label = temp_label.empty() ? hwmon_name : temp_label;
+                    label = sensor_name(hwmon_name, temp_label, i);
+                    if (label.empty()) continue;
                     data.sensors.emplace_back(label, c);
                 }
 
@@ -159,7 +193,7 @@ TempData read_temperatures() {
             if (type.rfind("nvme", 0) == 0 && !temp_str.empty()) {
                 try {
                     float c = std::stoi(temp_str) / 1000.0f;
-                    data.sensors.emplace_back(type, c);
+                    data.sensors.emplace_back("SSD", c);
                 } catch (...) {}
             }
         }
@@ -170,6 +204,13 @@ TempData read_temperatures() {
     });
     std::sort(data.sensors.begin(), data.sensors.end(),
               [](const auto& a, const auto& b) { return a.id < b.id; });
+    // номера ядер Intel идут с пропусками (0, 4, 8, ... у гибридных) — нумеруем по порядку с 1
+    for (size_t k = 0; k < data.cores.size(); ++k) {
+        if (data.cores[k].id.rfind("Ядро ", 0) == 0) data.cores[k].id = "Ядро " + std::to_string(k + 1);
+    }
+    make_unique_names(data.package);
+    make_unique_names(data.cores);
+    make_unique_names(data.sensors);
 
     return data;
 }
@@ -199,12 +240,10 @@ FanData read_fans() {
 
                 auto fan_label = read_line(base / (idx + "_label"));
                 std::string label;
-                if (hwmon_name == "nct6687") {
-                    label = fan_label.empty() ? ("Вентилятор " + std::to_string(i)) : fan_label;
-                } else if (hwmon_name == "coretemp") {
-                    label = "Вентилятор CPU";
+                if (hwmon_name == "coretemp") {
+                    label = "Вентилятор процессора";
                 } else {
-                    label = fan_label.empty() ? (hwmon_name + " fan" + std::to_string(i)) : fan_label;
+                    label = fan_label.empty() ? ("Вентилятор " + std::to_string(i)) : fan_label;
                 }
                 data.fans.emplace_back(label, rpm);
             } catch (...) {
@@ -583,6 +622,10 @@ HardwareInfo read_hardware_info() {
             n.name = name;
             n.type = read_line(iface.path() / "type");
             n.mac = read_line(iface.path() / "address");
+            // физический адаптер: есть ссылка device на контроллер
+            if (fs::exists(iface.path() / "device")) {
+                n.kind = fs::exists(iface.path() / "wireless") ? "Wi-Fi" : "Ethernet";
+            }
 
             // у Wi-Fi и опущенных интерфейсов speed не читается или равен -1
             n.speed_mbps = std::max(read_int(iface.path() / "speed"), 0);

@@ -33,9 +33,12 @@ tr:hover { background: #1c2128; }
 .fill-red { background: #f85149; }
 .fill-blue { background: #58a6ff; }
 /* колонки вместо grid: карточки по высоте содержимого, без пустот под короткими */
-.grid { column-count: 4; column-width: 320px; column-gap: 12px; }
+/* четыре колонки с заданным набором плиток; в колонке плитки по высоте содержимого */
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 1400px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .card h2 { margin-top: 0; }
-.card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; break-inside: avoid; margin-bottom: 12px; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
 .card.error { border-color: #f85149; }
 .val { font-size: 1.2em; font-weight: bold; }
 /* значения по ядрам компактной сеткой в одной строке таблицы */
@@ -43,6 +46,7 @@ tr:hover { background: #1c2128; }
 .core { background: #0d1117; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; }
 .core small { display: block; color: #8b949e; font-size: 0.85em; }
 td small { color: #8b949e; }
+.hint { text-decoration: underline dotted #8b949e; text-underline-offset: 3px; cursor: help; }
 .temp-critical { color: #f85149; font-weight: bold; }
 .temp-warn { color: #d29922; }
 .temp-ok { color: #3fb950; }
@@ -56,6 +60,8 @@ td small { color: #8b949e; }
 <script>
 'use strict';
 const REFRESH_MS = 2000;
+// служебные разделы загрузчика: на дашборде не показываем, в /api/disk они есть
+const HIDDEN_MOUNTS = /^\/(boot|efi)(\/|$)/;
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -75,7 +81,11 @@ function fb(b) {
   return (b / 1073741824).toFixed(1) + ' GB';
 }
 function deg(t) { return '<span class="' + tc(t) + '">' + num(t, 1) + '&#8451;</span>'; }
-function row(k, v) { return '<tr><td>' + k + '</td><td>' + v + '</td></tr>'; }
+// hint — пояснение во всплывающей подсказке к подписи
+function row(k, v, hint) {
+  const td = hint ? '<td class="hint" title="' + esc(hint) + '">' : '<td>';
+  return '<tr>' + td + k + '</td><td>' + v + '</td></tr>';
+}
 function section(t) { return '<tr><td colspan="2"><strong>' + t + '</strong></td></tr>'; }
 function cores(items) {
   if (!items.length) return '';
@@ -87,39 +97,63 @@ function card(id, title, rows) {
   return rows ? '<div class="card" id="' + id + '"><h2>' + title + '</h2><table>' + rows + '</table></div>' : '';
 }
 
+const GOVERNORS = {
+  powersave: 'Энергосбережение', performance: 'Максимальная производительность', schedutil: 'Автоматически',
+  ondemand: 'По требованию', conservative: 'Плавное ускорение', userspace: 'Вручную',
+};
+
 function loadCard(load, cpu) {
   let h = '';
+  const threads = (cpu && cpu.logical_cores) || (load.per_core || []).length || 1;
   if (cpu) {
     const mhz = (cpu.current_mhz && cpu.current_mhz.length) ? cpu.current_mhz[0] : NaN;
-    h += row('Частота', num(mhz, 0) + ' МГц <small>(' + num(cpu.min_mhz, 0) + '–' + num(cpu.max_mhz, 0) + ')</small>') +
-      row('Режим', esc(cpu.governor));
+    h += row('Частота', num(mhz, 0) + ' МГц <small>(' + num(cpu.min_mhz, 0) + '–' + num(cpu.max_mhz, 0) + ')</small>',
+        'Текущая частота процессора; в скобках — минимальная и максимальная') +
+      row('Режим питания', esc(GOVERNORS[cpu.governor] || cpu.governor) + (GOVERNORS[cpu.governor] ? ' <small>(' + esc(cpu.governor) + ')</small>' : ''),
+        'Как система управляет частотой: экономит энергию или держит высокую скорость');
   }
-  h += row('Общая', '<span class="val ' + tc(load.active_percent) + '">' + num(load.active_percent, 1) + '%</span>') +
-    row('Пользователь', '<div class="val">' + num(load.user_percent, 1) + '%</div>' + bar(load.user_percent)) +
-    row('Система', '<div class="val">' + num(load.system_percent, 1) + '%</div>' + bar(load.system_percent)) +
-    row('IO ожидание', '<div class="val">' + num(load.iowait_percent, 1) + '%</div>' + bar(load.iowait_percent)) +
-    row('Load', '<span class="val">' + num(load.load1, 2) + ' / ' + num(load.load5, 2) + ' / ' + num(load.load15, 2) + '</span>');
-  h += cores((load.per_core || []).map(c => ['CPU' + c.id, '<span class="' + tc(c.percent) + '">' + num(c.percent, 1) + '%</span>']));
+  const queuePct = load.load1 / threads * 100;
+  h += row('Загрузка', '<span class="val ' + tc(load.active_percent) + '">' + num(load.active_percent, 1) + '%</span>',
+      'Какую часть времени процессор был занят за последнюю секунду') +
+    row('Программы', '<div class="val">' + num(load.user_percent, 1) + '%</div>' + bar(load.user_percent),
+      'Работа ваших программ: браузер, редакторы, игры и т.д.') +
+    row('Система', '<div class="val">' + num(load.system_percent, 1) + '%</div>' + bar(load.system_percent),
+      'Работа самой операционной системы: драйверы, файлы, сеть') +
+    row('Ожидание диска', '<div class="val">' + num(load.iowait_percent, 1) + '%</div>' + bar(load.iowait_percent),
+      'Процессор простаивает, пока диск читает или пишет данные. Высокое значение — диск не успевает') +
+    row('Очередь задач', '<span class="val ' + tc(queuePct) + '">' + num(load.load1, 2) + ' / ' + num(load.load5, 2) + ' / ' + num(load.load15, 2) + '</span>' +
+      '<br><small>за 1 / 5 / 15 минут</small>',
+      'Сколько задач в среднем одновременно работали или ждали процессор (load average). ' +
+      'Если число больше количества потоков (' + threads + ') — компьютер не справляется');
+  h += cores((load.per_core || []).map(c => ['Поток ' + (c.id + 1), '<span class="' + tc(c.percent) + '">' + num(c.percent, 1) + '%</span>']));
   return card('load', 'Нагрузка', h);
+}
+
+function sensorHint(id) {
+  if (id.startsWith('Процессор в целом')) return 'Температура всего процессора — по самому горячему месту';
+  if (id.startsWith('SSD, датчик')) return 'Отдельная точка на плате SSD: контроллер или чипы памяти';
+  if (id.startsWith('SSD')) return 'Общая температура SSD-накопителя';
+  if (id.startsWith('Материнская плата')) return 'Датчик материнской платы (зона ACPI)';
+  return '';
 }
 
 function tempCard(temp) {
   let h = '';
   if (temp.package && temp.package.length) {
     h += section('Процессор');
-    for (const s of temp.package) h += row(esc(s.id), deg(s.celsius));
+    for (const s of temp.package) h += row(esc(s.id), deg(s.celsius), sensorHint(s.id));
   }
   if (temp.cores && temp.cores.length) {
     const v = temp.cores.map(s => s.celsius);
     const avg = v.reduce((a, b) => a + b, 0) / v.length;
-    h += section('Ядра') +
+    h += section('Ядра процессора') +
       row('Средняя', deg(avg)) +
       row('Мин / Макс', deg(Math.min(...v)) + ' / ' + deg(Math.max(...v))) +
       cores(temp.cores.map(s => [esc(s.id), deg(s.celsius)]));
   }
   if (temp.sensors && temp.sensors.length) {
-    h += section('Датчики');
-    for (const s of temp.sensors) h += row(esc(s.id), deg(s.celsius));
+    h += section('Другие устройства');
+    for (const s of temp.sensors) h += row(esc(s.id), deg(s.celsius), sensorHint(s.id));
   }
   return card('temp', 'Температура', h);
 }
@@ -128,21 +162,23 @@ function memCard(mem) {
   return card('mem', 'Память',
     row('Всего', '<span class="val">' + fb(mem.total) + '</span>') +
     row('Использовано', '<span class="val ' + tc(mem.used_percent) + '">' + fb(mem.used) + '</span>' + bar(mem.used_percent)) +
-    row('Доступно', fb(mem.available)) +
-    row('Кэш', fb(mem.cached)) +
-    row('Буферы', fb(mem.buffers)) +
-    row('Swap', fb(mem.swap_used) + ' / ' + fb(mem.swap_total) + ' (' + num(mem.swap_percent, 1) + '%)'));
+    row('Доступно', fb(mem.available), 'Сколько памяти программы могут получить прямо сейчас, с учётом освобождаемого кэша') +
+    row('Кэш файлов', fb(mem.cached), 'Недавно открытые файлы для быстрого доступа; освобождается сам, когда память нужна программам') +
+    row('Буферы диска', fb(mem.buffers), 'Служебная память для работы с дисками; освобождается сама') +
+    row('Подкачка', fb(mem.swap_used) + ' / ' + fb(mem.swap_total) + ' (' + num(mem.swap_percent, 1) + '%)',
+      'Место на диске, куда выгружается память, когда оперативной не хватает (swap). Работает намного медленнее'));
 }
 
 function diskCard(disk) {
   let h = '';
   for (const [mp, m] of Object.entries(disk.mounts || {})) {
+    if (HIDDEN_MOUNTS.test(mp)) continue;
     const used = m.total_bytes > 0 ? m.used_bytes / m.total_bytes * 100 : 0;
-    h += section(esc(mp) + ' (' + esc(m.device) + ')') +
-      row('Файловая система', esc(m.fstype)) +
+    h += section((mp === '/' ? 'Системный раздел' : esc(mp)) + ' <small>' + esc(m.device) + '</small>') +
       row('Занято / Свободно', '<span class="val">' + fb(m.used_bytes) + ' / ' + fb(m.total_bytes - m.used_bytes) + '</span>') +
-      row('Использование', bar(used)) +
-      row('IO', 'Чтение: ' + fb(m.read_bytes) + ' / Запись: ' + fb(m.write_bytes));
+      row('Заполнен', num(used, 0) + '%' + bar(used)) +
+      row('Прочитано / записано', fb(m.read_bytes) + ' / ' + fb(m.write_bytes), 'Сколько данных прочитано и записано с момента включения компьютера') +
+      row('Файловая система', esc(m.fstype), 'Способ хранения файлов на разделе');
   }
   return card('disk', 'Диски', h);
 }
@@ -155,24 +191,35 @@ function fanCard(fans) {
 
 function hwCard(hw, cpu, disk) {
   let h = '';
-  if (hw.product_name) h += row('Продукт', esc(hw.product_name));
+  if (hw.product_name) h += row('Модель компьютера', esc(hw.product_name));
   h += row('Материнская плата', esc(hw.board_vendor) + ' ' + esc(hw.board_name)) +
-    row('BIOS', esc(hw.bios_vendor) + ' v' + esc(hw.bios_version) + ' (' + esc(hw.bios_date) + ')');
+    row('BIOS', esc(hw.bios_vendor) + ' v' + esc(hw.bios_version) + ' (' + esc(hw.bios_date) + ')',
+      'Встроенная программа материнской платы, которая запускает компьютер');
   if (cpu) h += row('Процессор', esc(cpu.model) + '<br><small>' + cpu.physical_cores + ' ядер / ' + cpu.logical_cores + ' потоков</small>');
   for (const d of Object.values((disk && disk.disks) || {}).filter(d => d.kind))
     h += row('Диск ' + esc(d.name), esc(d.model || '—') + '<br><small>' + esc(d.kind) + ', ' + fb(d.size_bytes) + '</small>');
+  for (const g of hw.gpu || []) h += row('Видеокарта', esc(g));
+  for (const n of adapters(hw)) {
+    const info = [n.kind, n.speed_mbps > 0 ? n.speed_mbps + ' Мбит/с' : ''].filter(Boolean).join(', ');
+    h += row('Сеть ' + esc(n.name), esc(n.mac) + (info ? '<br><small>' + esc(info) + '</small>' : ''));
+  }
   if (hw.battery && hw.battery.status)
     h += row('Батарея', '<span class="val">' + hw.battery.capacity + '%</span> (' + esc(hw.battery.status) + ')');
-  for (const g of hw.gpu || []) h += row('Видеокарта', esc(g));
   return card('hw', 'Оборудование', h);
+}
+
+// физические адаптеры; если их нет (контейнер) — все интерфейсы
+function adapters(hw) {
+  const all = Object.values(hw.network || {});
+  const phys = all.filter(n => n.kind);
+  return phys.length ? phys : all;
 }
 
 function netCard(hw) {
   let h = '';
-  for (const n of Object.values(hw.network || {})) {
+  for (const n of adapters(hw)) {
     const max = n.speed_mbps > 0;
-    h += '<tr><td colspan="2"><strong>' + esc(n.name) + '</strong> MAC: ' + esc(n.mac) + '</td></tr>' +
-      row('Максимум', max ? n.speed_mbps + ' Мбит/с' : '—') +
+    h += section(esc(n.name)) +
       row('Приём', num(n.rate_rx_mbps, 1) + ' Мбит/с' + (max ? bar(n.rate_rx_mbps / n.speed_mbps * 100, 'fill-blue') : '')) +
       row('Передача', num(n.rate_tx_mbps, 1) + ' Мбит/с' + (max ? bar(n.rate_tx_mbps / n.speed_mbps * 100, 'fill-blue') : ''));
   }
@@ -195,14 +242,14 @@ async function refresh() {
     const r = await fetch('/api/all', {cache: 'no-store'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
+    const columns = [
+      [safe(d => loadCard(d.load, d.cpu), d.load && d, 'Нагрузка'), safe(fanCard, d.fans, 'Вентиляторы')],
+      [safe(tempCard, d.temp, 'Температура')],
+      [safe(memCard, d.mem, 'Память'), safe(diskCard, d.disk, 'Диски')],
+      [safe(d => hwCard(d.hw, d.cpu, d.disk), d.hw && d, 'Оборудование'), safe(netCard, d.hw, 'Сеть')],
+    ];
     document.getElementById('content').innerHTML =
-      safe(d => loadCard(d.load, d.cpu), d.load && d, 'Нагрузка') +
-      safe(tempCard, d.temp, 'Температура') +
-      safe(memCard, d.mem, 'Память') +
-      safe(diskCard, d.disk, 'Диски') +
-      safe(fanCard, d.fans, 'Вентиляторы') +
-      safe(d => hwCard(d.hw, d.cpu, d.disk), d.hw && d, 'Оборудование') +
-      safe(netCard, d.hw, 'Сеть');
+      columns.map(cards => '<div class="col">' + cards.join('') + '</div>').join('');
     status.textContent = 'Обновлено: ' + new Date().toLocaleString('ru-RU');
     status.classList.remove('error');
   } catch (e) {

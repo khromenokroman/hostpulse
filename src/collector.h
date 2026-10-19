@@ -132,6 +132,7 @@ struct BatteryInfo {
 struct NetworkInfo {
     std::string name;
     std::string type;
+    std::string kind;  ///< Wi-Fi / Ethernet; пусто у виртуальных (docker, veth, мосты)
     std::string mac;
     int speed_mbps = 0;
     uint64_t rx_bytes = 0;
@@ -349,6 +350,7 @@ inline void to_json(nlohmann::json& j, const NetworkInfo& n) {
     j = nlohmann::json{
         {"name", n.name},
         {"type", n.type},
+        {"kind", n.kind},
         {"mac", n.mac},
         {"speed_mbps", n.speed_mbps},
         {"rx_bytes", n.rx_bytes},
