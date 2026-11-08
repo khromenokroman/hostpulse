@@ -143,6 +143,21 @@ struct NetworkInfo {
     float rate_tx_mbps = 0.0f;
 };
 
+/** @brief Информация о видеокарте */
+struct GpuInfo {
+    std::string name;       ///< модель из lspci
+    std::string driver;     ///< i915, amdgpu, nouveau, nvidia
+    int index = 0;          ///< номер cardN в /sys/class/drm
+    int64_t vram_total = 0; ///< видеопамять, байты; 0: недоступна
+    int64_t vram_used = 0;  ///< занято, байты; 0: недоступна
+    float temp_celsius = 0.0f;
+    float power_watts = 0.0f;       ///< текущее энергопотребление; 0: недоступно
+    float power_limit_watts = 0.0f; ///< установленный лимит; 0: недоступно
+    float busy_percent = 0.0f;      ///< 0: недоступно
+    int fan_rpm = 0;                ///< 0: обороты нечитаемы (AIB) или вентилятора нет
+    std::string power_profile;      ///< performance, power_saving, balanced
+};
+
 /** @brief Информация об оборудовании (DMI, BIOS, GPU, сеть) */
 struct HardwareInfo {
     std::string board_vendor;
@@ -164,6 +179,7 @@ struct SystemStatus {
     CpuLoad load;
     TempData temp;
     FanData fans;
+    std::vector<GpuInfo> gpu;
     MemInfo mem;
     DiskInfo disk;
     HardwareInfo hw;
@@ -212,6 +228,12 @@ DiskInfo read_disk_info();
 
 /** @brief Считать информацию об оборудовании (DMI, BIOS, GPU, сеть, батарея) */
 HardwareInfo read_hardware_info();
+
+/** @brief Считать данные видеокарт: sysfs (/sys/class/drm, hwmon) и nvidia-smi */
+std::vector<GpuInfo> read_gpu_info();
+
+/** @brief Debug: сырые результаты nvidia-smi для диагностики */
+std::string debug_nvidia_info();
 
 // JSON сериализация
 template <typename K, typename V>
@@ -310,6 +332,20 @@ inline void to_json(nlohmann::json& j, const NetworkInfo& n) {
                        {"rate_tx_mbps", n.rate_tx_mbps}};
 }
 
+inline void to_json(nlohmann::json& j, const GpuInfo& g) {
+    j = nlohmann::json{{"name", g.name},
+                       {"driver", g.driver},
+                       {"index", g.index},
+                       {"vram_total", g.vram_total},
+                       {"vram_used", g.vram_used},
+                       {"temp_celsius", g.temp_celsius},
+                       {"power_watts", g.power_watts},
+                       {"power_limit_watts", g.power_limit_watts},
+                       {"busy_percent", g.busy_percent},
+                       {"fan_rpm", g.fan_rpm},
+                       {"power_profile", g.power_profile}};
+}
+
 inline void to_json(nlohmann::json& j, const HardwareInfo& h) {
     j = nlohmann::json{{"board_vendor", h.board_vendor},
                        {"board_name", h.board_name},
@@ -325,8 +361,9 @@ inline void to_json(nlohmann::json& j, const HardwareInfo& h) {
 }
 
 inline void to_json(nlohmann::json& j, const SystemStatus& s) {
-    j = nlohmann::json{{"cpu", s.cpu}, {"load", s.load}, {"temp", s.temp}, {"fans", s.fans},
-                       {"mem", s.mem}, {"disk", s.disk}, {"hw", s.hw},     {"timestamp", std::chrono::system_clock::to_time_t(s.timestamp)}};
+    j = nlohmann::json{{"cpu", s.cpu},   {"load", s.load}, {"temp", s.temp},
+                       {"fans", s.fans}, {"gpu", s.gpu},   {"mem", s.mem},
+                       {"disk", s.disk}, {"hw", s.hw},     {"timestamp", std::chrono::system_clock::to_time_t(s.timestamp)}};
 }
 
 } // namespace hostpulse::collector

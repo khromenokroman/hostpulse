@@ -14,7 +14,9 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=yes
-PrivateDevices=yes
+# PrivateDevices=no: с yes устройства /dev/nvidia* не появляются в приватном /dev
+# (DeviceAllow настраивает cgroup-фильтр, но не создаёт ноды), NVML не инициализируется
+PrivateDevices=no
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
