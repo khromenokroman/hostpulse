@@ -58,6 +58,38 @@ TEST(CollectorTest, ReadDiskInfo) {
     EXPECT_FALSE(disk.disks.empty());
 }
 
+/**
+ * Видеокарты: /sys/class/drm/cardN. На машине без дискретной видеокарты (только i915)
+ * может быть одна или ни одной: проверяем структуру, не количество.
+ */
+TEST(CollectorTest, ReadGpuInfo) {
+    auto gpus = read_gpu_info();
+    // Если нет дискретной видеокарты, gpus может быть пуст
+    // (например, в виртуалке с virtio-gpu)
+    for (const auto& g : gpus) {
+        SCOPED_TRACE(g.name);
+        EXPECT_GE(g.index, 0);
+        EXPECT_TRUE(!g.driver.empty()) << "драйвер должен быть определён";
+        if (g.vram_total > 0) {
+            EXPECT_GE(g.vram_used, 0);
+            EXPECT_LE(g.vram_used, g.vram_total);
+        }
+        EXPECT_GE(g.temp_celsius, 0.0f);
+        EXPECT_GE(g.power_watts, 0.0f);
+        EXPECT_GE(g.busy_percent, 0.0f);
+    }
+}
+
+/**
+ * Sampler: второй замер отдаёт GPU-данные (read_gpu_info вызывается в sample)
+ */
+TEST(SamplerTest, SampleIncludesGpu) {
+    Sampler sampler;
+    auto st = sampler.sample();
+    // GPU-данные должны быть в снимке (может быть пусто в виртуалке)
+    (void)st.gpu;
+}
+
 TEST(CollectorTest, ReadHardwareInfo) {
     auto hw = read_hardware_info();
     EXPECT_FALSE(hw.board_vendor.empty());

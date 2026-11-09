@@ -189,6 +189,28 @@ function fanCard(fans) {
   return card('fans', 'Вентиляторы', h);
 }
 
+function gpuCard(gpu) {
+  const list = (gpu && gpu) || [];
+  if (!list.length) return '';
+  let h = '';
+  for (const g of list) {
+    h += section(esc(g.name || ('Видеокарта ' + (g.index + 1)))) +
+      row('Загрузка', '<span class="' + tc(g.busy_percent) + '">' + num(g.busy_percent, 0) + '%</span>' + bar(g.busy_percent),
+          'Сколько времени за последний интервал видеокарта была занята вычислениями') +
+      row('Видеопамять', '<span class="val">' + fb(g.vram_used) + ' / ' + fb(g.vram_total) + '</span>' +
+        bar(g.vram_total > 0 ? g.vram_used / g.vram_total * 100 : 0),
+          'Сколько видеопамяти занято программами') +
+      row('Температура', deg(g.temp_celsius), 'Температура самого горячего места на карте') +
+      row('Вентилятор', g.fan_rpm > 0 ? '<span class="val">' + g.fan_rpm + '</span>' : '<span class="val">—</span>',
+          g.driver === 'nvidia' ? 'Обороты в процентах от максимума (NVIDIA)' : 'Обороты вентилятора в об/мин') +
+      row('Энергопотребление', num(g.power_watts, 1) + ' Вт' +
+        (g.power_limit_watts > 0 ? ' <small>(' + num(g.power_limit_watts, 0) + ' Вт)</small>' : ''),
+        'Сколько энергии карта потребляет прямо сейчас' + (g.power_limit_watts > 0 ? '; в скобках: установленный лимит' : '')) +
+      (g.power_profile ? row('Профиль питания', esc(g.power_profile), 'Режим работы карты: производительность, баланс или экономия') : '');
+  }
+  return card('gpu', 'Видеокарты', h);
+}
+
 function hwCard(hw, cpu, disk) {
   let h = '';
   if (hw.product_name) h += row('Модель компьютера', esc(hw.product_name));
@@ -243,7 +265,7 @@ async function refresh() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     const columns = [
-      [safe(d => loadCard(d.load, d.cpu), d.load && d, 'Нагрузка'), safe(fanCard, d.fans, 'Вентиляторы')],
+      [safe(d => loadCard(d.load, d.cpu), d.load && d, 'Нагрузка'), safe(fanCard, d.fans, 'Вентиляторы'), safe(gpuCard, d.gpu, 'Видеокарты')],
       [safe(tempCard, d.temp, 'Температура')],
       [safe(memCard, d.mem, 'Память'), safe(diskCard, d.disk, 'Диски')],
       [safe(d => hwCard(d.hw, d.cpu, d.disk), d.hw && d, 'Оборудование'), safe(netCard, d.hw, 'Сеть')],

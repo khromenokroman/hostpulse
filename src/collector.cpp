@@ -76,6 +76,265 @@ static std::string trim(const std::string& s) {
     return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
 }
 
+/** @brief Запустить команду и вернуть stdout; пусто при ошибке */
+static std::string run_cmd(const std::string& cmd) {
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) return {};
+    std::string result;
+    char buf[256];
+    while (fgets(buf, sizeof(buf), pipe)) result += buf;
+    pclose(pipe);
+    return result;
+}
+
+// ------------------------------------------------------------------
+// Видеокарты
+// ------------------------------------------------------------------
+
+/** @brief PCI-адрес из /sys/class/drm/cardN/device: "00:02.0" из "0000:00:02.0" */
+static std::string pci_address(const fs::path& device_dir) {
+    auto target = fs::canonical(device_dir);
+    std::string name = target.filename().string();
+    if (name.rfind("0000:", 0) == 0) name = name.substr(5);
+    return name;
+}
+
+/** @brief Модель из lspci по PCI-адресу; пусто, если lspci нет или адрес не найден */
+static std::string lspci_name(const std::string& pci_addr) {
+    auto out = run_cmd("lspci 2>/dev/null");
+    if (out.empty()) return {};
+    std::istringstream stream(out);
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.find(pci_addr) == 0) {
+            auto colon = line.find(":");
+            return (colon == std::string::npos) ? line : trim(line.substr(colon + 1));
+        }
+    }
+    return {};
+}
+
+static void fill_gpu_hwmon(GpuInfo& gpu, const fs::path& device) {
+    // hwmon-каталог драйвера (amdgpu, radeon): самая высокая температура, самый быстрый вентилятор
+    fs::path hwmon = device / "hwmon";
+    if (fs::exists(hwmon)) {
+        for (const auto& entry : fs::directory_iterator(hwmon)) {
+            for (int i : hwmon_indices(entry.path(), "temp")) {
+                auto val_str = read_word(entry.path() / ("temp" + std::to_string(i) + "_input"));
+                if (val_str.empty()) continue;
+                try {
+                    float c = celsius_from_millideg(std::stoi(val_str));
+                    if (c > gpu.temp_celsius) gpu.temp_celsius = c;
+                } catch (...) {
+                }
+            }
+            for (int i : hwmon_indices(entry.path(), "fan")) {
+                auto val_str = read_word(entry.path() / ("fan" + std::to_string(i) + "_input"));
+                if (val_str.empty()) continue;
+                try {
+                    int rpm = std::stoi(val_str);
+                    if (rpm > 0 && rpm != 255 && rpm != 127 && rpm != 31 && rpm != 15) {
+                        // 255/127/31/15: драйвер не может прочитать обороты (AIB-карты без SMBus)
+                        gpu.fan_rpm = rpm;
+                    }
+                } catch (...) {
+                }
+            }
+        }
+    }
+}
+
+/** @brief NVIDIA: энергия, память, обороты через nvidia-smi. fan.speed у пассивных карт (SXM, Tesla) = N/A: пропускаем. */
+static void fill_gpu_nvidia(GpuInfo& gpu, const fs::path& device) {
+    // PCI-адрес из sysfs: /sys/class/drm/cardN/device/uevent, строка PCI_SLOT_NAME=XXXX:XX:XX.X
+    std::string pci_slot;
+    std::ifstream uevent(device / "uevent");
+    std::string line;
+    while (std::getline(uevent, line)) {
+        if (line.rfind("PCI_SLOT_NAME=", 0) == 0) {
+            pci_slot = trim(line.substr(14));
+            break;
+        }
+    }
+    if (pci_slot.empty()) return;
+
+    // Запрашиваем PCI-адреса всех NVIDIA GPU и ищем совпадение
+    auto bus_ids = run_cmd("nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader 2>/dev/null");
+    if (bus_ids.empty()) return;
+
+    std::istringstream bs(bus_ids);
+    int idx = 0;
+    int nvidia_idx = -1;
+    while (std::getline(bs, line)) {
+        auto bus_id = trim(line);
+        // нормализация: 00000000:01:00.0 -> 0000:01:00.0
+        auto colon = bus_id.find(":");
+        if (colon != std::string::npos && colon > 4) {
+            bus_id = "0000:" + bus_id.substr(colon + 1);
+        }
+        if (bus_id == pci_slot) {
+            nvidia_idx = idx;
+            break;
+        }
+        idx++;
+    }
+    if (nvidia_idx < 0) return;
+
+    auto one = run_cmd("nvidia-smi -i " + std::to_string(nvidia_idx) +
+                       " --query-gpu=power.draw,power.limit,utilization.gpu,"
+                       "memory.used,memory.total,fan.speed,temperature.gpu --format=csv,noheader,nounits 2>/dev/null");
+    if (one.empty()) return;
+
+    // Разделяем по запятым, сохраняя исходные индексы
+    std::vector<std::pair<int, std::string>> fields;
+    std::istringstream ls(one);
+    std::string field;
+    int fidx = 0;
+    while (std::getline(ls, field, ',')) {
+        field = trim(field);
+        if (!field.empty() && field != "N/A" && field != "[N/A]") {
+            fields.push_back({fidx, field});
+        }
+        fidx++;
+    }
+
+    for (const auto& [i, val] : fields) {
+        try {
+            if (i == 0)
+                gpu.power_watts = std::stof(val);
+            else if (i == 1)
+                gpu.power_limit_watts = std::stof(val);
+            else if (i == 2)
+                gpu.busy_percent = std::stof(val);
+            else if (i == 3)
+                gpu.vram_used = static_cast<int64_t>(std::stod(val)) * 1024 * 1024;
+            else if (i == 4)
+                gpu.vram_total = static_cast<int64_t>(std::stod(val)) * 1024 * 1024;
+            else if (i == 5)
+                gpu.fan_rpm = std::stoi(val);
+            else if (i == 6)
+                gpu.temp_celsius = std::stof(val);
+        } catch (...) {
+        }
+    }
+}
+
+/** @brief Debug: возвращает сырые результаты nvidia-smi для диагностики. */
+std::string debug_nvidia_info() {
+    nlohmann::json result;
+    result["nvidia_bus_ids"] = run_cmd("nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader 2>&1");
+    result["nvidia_list"] = run_cmd("nvidia-smi -L 2>&1");
+    return result.dump();
+}
+
+std::vector<GpuInfo> read_gpu_info() {
+    std::vector<GpuInfo> gpus;
+
+    // /sys/class/drm/cardN: дисплейные устройства. computeN (NVIDIA MIG, Intel cGPU) не показываем.
+    // NVIDIA в виртуалках может быть только в /dev/nvidiactl: сейчас не обрабатываем.
+    fs::path drm_dir("/sys/class/drm");
+    if (!fs::exists(drm_dir)) return gpus;
+
+    for (const auto& entry : fs::directory_iterator(drm_dir)) {
+        auto name = entry.path().filename().string();
+        if (name.rfind("card", 0) != 0) continue;
+        if (!std::all_of(name.begin() + 4, name.end(), ::isdigit)) continue;
+
+        fs::path card = entry.path();
+        fs::path device = card / "device";
+        if (!fs::exists(device)) continue; // виртуальные (virtio, vbox): только cardN без PCI
+
+        GpuInfo g;
+        g.index = std::stoi(name.substr(4));
+
+        // драйвер: имя ссылки device/driver
+        std::error_code ec;
+        auto driver = fs::read_symlink(device / "driver", ec);
+        if (!ec) g.driver = driver.filename().string();
+
+        // модель из lspci по PCI-адресу; если lspci нет: имя драйвера
+        auto pci = pci_address(device);
+        g.name = lspci_name(pci);
+        if (g.name.empty()) g.name = g.driver + " (card" + std::to_string(g.index) + ")";
+
+        // данные по драйверу: /sys/class/drm/cardN/device/...
+        auto read_file = [&](const char* file) -> std::string { return read_word(device / file); };
+        auto read_int64 = [&](const char* file) -> int64_t {
+            auto s = read_file(file);
+            try {
+                return s.empty() ? 0 : std::stoll(s);
+            } catch (...) {
+                return 0;
+            }
+        };
+
+        if (g.driver == "amdgpu" || g.driver == "radeon") {
+            g.vram_total = read_int64("mem_info_vram_total");
+            g.vram_used = read_int64("mem_info_vram_used");
+            auto power = read_file("power_power_consumption");
+            if (!power.empty()) {
+                try {
+                    g.power_watts = std::stoll(power) / 1000.0f; // мВт
+                } catch (...) {
+                }
+            }
+            auto busy = read_file("gpu_busy_percent");
+            if (!busy.empty()) {
+                try {
+                    g.busy_percent = std::stof(busy);
+                } catch (...) {
+                }
+            }
+            // режим питания: power_dpm_force_performance_level (amdgpu)
+            auto profile = read_line(device / "power_dpm_force_performance_level");
+            if (!profile.empty() && profile != "default") g.power_profile = profile;
+        }
+
+        if (g.driver == "i915" || g.driver == "xe") {
+            auto busy = read_file("gpu_busy_percent");
+            if (!busy.empty()) {
+                try {
+                    g.busy_percent = std::stof(busy);
+                } catch (...) {
+                }
+            }
+            // i915 не отдаёт vram_total: читаем из /sys/firmware/acpi (Intel HD/Audio)
+            // Для Intel встроенной графики VRAM общий с RAM: показываем только если есть данные
+        }
+
+        if (g.driver == "nvidia") {
+            fill_gpu_nvidia(g, device);
+            // температура: /sys/class/thermal/thermal_zoneN (type=nvidia0)
+            fs::path thermal_dir("/sys/class/thermal");
+            if (fs::exists(thermal_dir)) {
+                for (const auto& tz : fs::directory_iterator(thermal_dir)) {
+                    auto type = read_line(tz.path() / "type");
+                    if (type.rfind("nvidia", 0) != 0) continue;
+                    auto val_str = read_word(tz.path() / "temp");
+                    if (val_str.empty()) continue;
+                    try {
+                        float c = std::stoi(val_str) / 1000.0f;
+                        if (c > g.temp_celsius) g.temp_celsius = c;
+                    } catch (...) {
+                    }
+                }
+            }
+        }
+
+        // температура и вентилятор: hwmon драйвера (cardN/device/hwmon/hwmon*/...).
+        // Это общий путь для i915/xe/amdgpu/radeon; у NVIDIA hwmon под drm/device не регистрируется,
+        // его температура идёт через /sys/class/thermal (см. выше, в блоке nvidia).
+        fill_gpu_hwmon(g, device);
+
+        gpus.push_back(std::move(g));
+    }
+
+    // по возрастанию индекса cardN
+    std::sort(gpus.begin(), gpus.end(), [](const auto& a, const auto& b) { return a.index < b.index; });
+
+    return gpus;
+}
+
 // ------------------------------------------------------------------
 // Температура
 // ------------------------------------------------------------------
@@ -657,6 +916,7 @@ SystemStatus read_all() {
     status.load = read_cpu_load();
     status.temp = read_temperatures();
     status.fans = read_fans();
+    status.gpu = read_gpu_info();
     status.mem = read_memory();
     status.disk = read_disk_info();
     status.hw = read_hardware_info();

@@ -69,14 +69,18 @@ bool start_server(int port, const std::vector<Route>& extra_routes, const std::s
     std::thread sampler_thread(sampler_loop, std::move(sampler));
 
     static const std::pair<const char*, const char*> kApi[] = {
-        {"/api/cpu", "cpu"},   {"/api/load", "load"}, {"/api/temp", "temp"}, {"/api/fans", "fans"}, {"/api/mem", "mem"},
-        {"/api/disk", "disk"}, {"/api/hw", "hw"},     {"/api/all", ""},      {"/api/health", ""},
+        {"/api/cpu", "cpu"}, {"/api/load", "load"}, {"/api/temp", "temp"}, {"/api/fans", "fans"}, {"/api/gpu", "gpu"},
+        {"/api/mem", "mem"}, {"/api/disk", "disk"}, {"/api/hw", "hw"},     {"/api/all", ""},      {"/api/health", ""},
     };
     for (const auto& [path, key] : kApi) {
         g_server->Get(path, [key = std::string(key)](const httplib::Request&, httplib::Response& res) {
             res.set_content(snapshot_part(key), "application/json");
         });
     }
+
+    // Debug endpoint: raw nvidia-smi output for diagnostics
+    g_server->Get("/api/gpu/debug",
+                  [](const httplib::Request&, httplib::Response& res) { res.set_content(collector::debug_nvidia_info(), "application/json"); });
 
     g_server->Get("/", [](const httplib::Request&, httplib::Response& res) { res.set_content(std::string(kIndexHtml), "text/html; charset=utf-8"); });
 
